@@ -27,7 +27,10 @@ so it can front any index that carries per-document roles.
 ## Quick start
 
 Requires Docker with Compose, a reachable OpenSearch index, and an LDAP
-server.
+server. The compose example joins a running Pelican deployment: its
+network, and its `certs` volume for the CA that signed OpenSearch's
+certificate. Frogmouth signs in as Pelican's read-only `pelican-reader`
+account, so set `OS_PASSWORD` in `.env` to Pelican's `OS_READER_PASSWORD`.
 
 ```sh
 cp .env.example .env              # LDAP, session secret, SMB credentials
@@ -54,7 +57,7 @@ come from the environment.
 | Section | What it controls |
 | --- | --- |
 | `app` | Title, subtitle, search placeholder, optional logo |
-| `opensearch` | Host and index (`OS_HOST`, `SEARCH_INDEX`) |
+| `opensearch` | Host, index, account and CA (`OS_HOST`, `SEARCH_INDEX`, `OS_USERNAME`, `OS_PASSWORD`, `OS_CA_CERTS`) |
 | `auth.ldap` | LDAP URL, bind template, base DN, username attribute |
 | `security` | Role field and how user, group and default roles are encoded. Must match the indexer |
 | `fields` | Map of UI field names to index field names |
@@ -78,6 +81,8 @@ signed-in user can see that document.
 
 - Every query and download is filtered on roles computed at sign-in from
   LDAP. Client-supplied roles are never trusted.
+- Sign in to OpenSearch with an account that can only read the index
+  (with Pelican, `pelican-reader`).
 - Set a long random `SESSION_SECRET`.
 - Put Frogmouth behind HTTPS, then enable `cookie.secure` in `server.js`.
 - LDAP binds use the user's own credentials; use `ldaps://` where possible.

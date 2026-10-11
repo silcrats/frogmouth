@@ -24,8 +24,15 @@ app:
   # logo: "/branding/logo.png"
 
 opensearch:
-  host: "${OS_HOST:-http://opensearch:9200}"
+  host: "${OS_HOST:-https://opensearch:9200}"
   index: "${SEARCH_INDEX:-documents}"
+  # Account to sign in as; read access to the index is enough (with Pelican:
+  # pelican-reader). Leave empty for a cluster without the security plugin.
+  username: "${OS_USERNAME:-}"
+  password: "${OS_PASSWORD:-}"
+  # CA certificate that signed OpenSearch's certificate, if it isn't from a
+  # public CA (with Pelican: ca.pem in its certs volume, mounted at /certs).
+  ca_certs: "${OS_CA_CERTS:-}"
 
 session:
   # Required, at least 32 characters; the server refuses to start without

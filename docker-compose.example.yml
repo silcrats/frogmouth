@@ -5,8 +5,11 @@
 #   cp /path/to/pelican/config/shares.yaml ./shares.yaml   # for downloads
 #   docker compose -f docker-compose.example.yml up -d --build
 #
-# OpenSearch must be reachable at OS_HOST. If it runs in another compose
-# project, join that project's network instead of `search` below.
+# This joins the network and certs volume of Pelican's compose example,
+# whose OpenSearch serves HTTPS with its own CA. Docker names them after
+# Pelican's compose project, `pelican` if it runs from a directory of that
+# name (check with `docker network ls` / `docker volume ls`). Start Pelican
+# first; set OS_PASSWORD in .env to Pelican's OS_READER_PASSWORD.
 
 services:
   frogmouth:
@@ -15,7 +18,10 @@ services:
     env_file: .env
     environment:
       SHARES_CONFIG: /app/shares.yaml
+      OS_CA_CERTS: /certs/ca.pem
     volumes:
+      # Pelican's CA, to verify OpenSearch's certificate.
+      - certs:/certs:ro
       # SMB server/share definitions for downloads; omit to disable them.
       - ./shares.yaml:/app/shares.yaml:ro
       # Optional: your own config.yaml, and a logo for app.logo.
@@ -31,3 +37,10 @@ services:
 
 networks:
   search:
+    external: true
+    name: pelican_search
+
+volumes:
+  certs:
+    external: true
+    name: pelican_certs

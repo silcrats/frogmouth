@@ -4,12 +4,13 @@ const path = require('path');
 const { loadConfig, publicConfig } = require('./lib/config');
 const { createLdapAuth } = require('./lib/auth/ldap');
 const { createSmbDownloader } = require('./lib/downloaders/smb');
+const { createOpenSearchClient } = require('./lib/opensearch');
 
 const config = loadConfig();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const OS_HOST = config.opensearch.host;
+const opensearch = createOpenSearchClient(config.opensearch);
 const SEARCH_INDEX = config.opensearch.index;
 const F = config.fields;
 const ROLE_FIELD = config.security.role_field;
@@ -153,16 +154,9 @@ function toIsoDate(dateStr, endOfDay) {
 }
 
 async function osSearch(body) {
-  const res = await fetch(`${OS_HOST}/${SEARCH_INDEX}/_search`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`OpenSearch error ${res.status}: ${text}`);
-  }
-  return res.json();
+  const res = await opensearch.request('POST', `/${encodeURIComponent(SEARCH_INDEX)}/_search`, body);
+  if (!res.ok) throw new Error(`OpenSearch error ${res.status}: ${res.text}`);
+  return JSON.parse(res.text);
 }
 
 function roleFilter(roles) {
@@ -398,9 +392,11 @@ app.get('/api/download', requireAuth, async (req, res) => {
   }
 });
 
+// Checks the index rather than the cluster: a read-only account (such as
+// Pelican's pelican-reader) has no cluster permissions.
 app.get('/api/health', async (req, res) => {
   try {
-    const r = await fetch(`${OS_HOST}/_cluster/health`);
+    const r = await opensearch.request('GET', `/${encodeURIComponent(SEARCH_INDEX)}/_count`);
     res.status(r.ok ? 200 : 502).json({ opensearch_reachable: r.ok });
   } catch (err) {
     res.status(502).json({ opensearch_reachable: false, error: err.message });
@@ -432,7 +428,7 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`Frogmouth Search listening on port ${PORT}`);
   console.log(`Config loaded from ${config.configPath}`);
-  console.log(`OpenSearch at ${OS_HOST}, index ${SEARCH_INDEX}`);
+  console.log(`OpenSearch at ${opensearch.describe()}, index ${SEARCH_INDEX}`);
   console.log(`Auth: ${auth.describe()}`);
   for (const [scheme, d] of Object.entries(downloaders)) console.log(`Downloads (${scheme}): ${d.describe()}`);
 });
