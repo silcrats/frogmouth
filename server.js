@@ -50,6 +50,22 @@ app.use(session({
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
+// Thrown for malformed client input; the error handler at the bottom turns
+// it into a 400 with this message.
+class BadRequest extends Error {
+  constructor(message) { super(message); this.status = 400; this.expose = true; }
+}
+
+// A single query-string value, or '' if absent. A repeated or bracketed
+// parameter (?q=a&q=b) arrives as an array or object -- reject it rather
+// than let a string method throw on it.
+function queryParam(req, name) {
+  const v = req.query[name];
+  if (v === undefined) return '';
+  if (typeof v !== 'string') throw new BadRequest(`Invalid ${name} parameter`);
+  return v;
+}
+
 function requireAuth(req, res, next) {
   if (req.session && req.session.user) return next();
   return res.status(401).json({ error: 'Not logged in' });
@@ -157,14 +173,16 @@ function roleFilter(roles) {
 // against exactly the filters/scope/dates/security a real search would use.
 function buildFilterBool(filters, logic, dateFrom, dateTo, scope, roles) {
   const filterClauses = filters
-    .filter(f => f && f.field && f.value && FIELD_MAP[f.field])
+    .filter(f => f.value && Object.hasOwn(FIELD_MAP, f.field))
     .map(f => {
       const field = FIELD_MAP[f.field];
       if (f.field === 'type') {
         // A broad category (types.groups, e.g. "images") matches any of its
         // members; a merged alias (types.aliases, jpg/jpeg) matches each of
         // its values; otherwise it's a plain single value.
-        const values = TYPE_GROUPS[f.value] || TYPE_ALIASES[f.value] || [f.value];
+        const values = Object.hasOwn(TYPE_GROUPS, f.value) ? TYPE_GROUPS[f.value]
+          : Object.hasOwn(TYPE_ALIASES, f.value) ? TYPE_ALIASES[f.value]
+          : [f.value];
         return { terms: { [field]: values } };
       }
       if (f.field === 'share') {
@@ -189,7 +207,7 @@ function buildFilterBool(filters, logic, dateFrom, dateTo, scope, roles) {
 
   // Optional source scope (a sources[].key). Anything else, including no
   // value, searches everything.
-  const scopeHost = SCOPE_HOSTS[scope];
+  const scopeHost = Object.hasOwn(SCOPE_HOSTS, scope) ? SCOPE_HOSTS[scope] : null;
   if (scopeHost) filterBool.push({ term: { [F.source]: scopeHost } });
 
   // The security-critical part: every search is constrained to documents
@@ -200,35 +218,44 @@ function buildFilterBool(filters, logic, dateFrom, dateTo, scope, roles) {
   return filterBool;
 }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// filters is a JSON array of { field, value } string pairs; dates are
+// YYYY-MM-DD. Anything else is a 400, not a malformed OpenSearch query.
 function parseFilterParams(req) {
-  const filters = JSON.parse(req.query.filters || '[]');
-  const logic = (req.query.logic || 'AND').toUpperCase() === 'OR' ? 'OR' : 'AND';
-  const dateFrom = toIsoDate(req.query.dateFrom, false);
-  const dateTo = toIsoDate(req.query.dateTo, true);
-  return { filters, logic, dateFrom, dateTo };
+  let filters;
+  try {
+    filters = JSON.parse(queryParam(req, 'filters') || '[]');
+  } catch {
+    throw new BadRequest('Invalid filters parameter');
+  }
+  if (!Array.isArray(filters) || !filters.every(f =>
+    f && typeof f === 'object' && typeof f.field === 'string' && typeof f.value === 'string')) {
+    throw new BadRequest('Invalid filters parameter');
+  }
+  const logic = queryParam(req, 'logic').toUpperCase() === 'OR' ? 'OR' : 'AND';
+  const from = queryParam(req, 'dateFrom');
+  const to = queryParam(req, 'dateTo');
+  if ((from && !DATE_RE.test(from)) || (to && !DATE_RE.test(to))) {
+    throw new BadRequest('Invalid date parameter');
+  }
+  return { filters, logic, dateFrom: toIsoDate(from, false), dateTo: toIsoDate(to, true) };
 }
 
 app.get('/api/search', requireAuth, async (req, res) => {
-  const qRaw = (req.query.q || '').trim();
+  const qRaw = queryParam(req, 'q').trim();
   // "quoted" search: require the exact phrase, not just all/any of its
   // words anywhere in the field.
   const phraseSearch = qRaw.length > 2 && qRaw.startsWith('"') && qRaw.endsWith('"');
   const q = phraseSearch ? qRaw.slice(1, -1).trim() : qRaw;
-  const start = parseInt(req.query.start, 10) || 0;
-  const rows = parseInt(req.query.rows, 10) || 10;
-
-  let params;
-  try {
-    params = parseFilterParams(req);
-  } catch (err) {
-    return res.status(400).json({ error: 'Invalid filters parameter' });
-  }
-  const { filters, logic, dateFrom, dateTo } = params;
+  const start = parseInt(queryParam(req, 'start'), 10) || 0;
+  const rows = parseInt(queryParam(req, 'rows'), 10) || 10;
+  const { filters, logic, dateFrom, dateTo } = parseFilterParams(req);
 
   // A blank q is valid: with filters set it browses just what matches them, and
   // with none set it lists everything the signed-in user can see (still capped
   // by role + pagination) -- match_all in place of the text search below.
-  const filterBool = buildFilterBool(filters, logic, dateFrom, dateTo, req.query.scope, req.session.user.roles);
+  const filterBool = buildFilterBool(filters, logic, dateFrom, dateTo, queryParam(req, 'scope'), req.session.user.roles);
 
   const body = {
     from: start,
@@ -270,13 +297,7 @@ app.get('/api/search', requireAuth, async (req, res) => {
 });
 
 app.get('/api/facets', requireAuth, async (req, res) => {
-  let params;
-  try {
-    params = parseFilterParams(req);
-  } catch (err) {
-    return res.status(400).json({ error: 'Invalid filters parameter' });
-  }
-  const { filters, logic, dateFrom, dateTo } = params;
+  const { filters, logic, dateFrom, dateTo } = parseFilterParams(req);
 
   // Type's counts reflect every other currently-active filter (source,
   // scope, free-text, dates) -- but never the Type filter's own value,
@@ -285,7 +306,7 @@ app.get('/api/facets', requireAuth, async (req, res) => {
   // this to just the types agg, so Source's counts below stay role-scoped
   // only.
   const typeContextFilters = buildFilterBool(
-    filters.filter(f => f.field !== 'type'), logic, dateFrom, dateTo, req.query.scope, req.session.user.roles
+    filters.filter(f => f.field !== 'type'), logic, dateFrom, dateTo, queryParam(req, 'scope'), req.session.user.roles
   );
 
   const body = {
@@ -345,7 +366,7 @@ app.get('/api/facets', requireAuth, async (req, res) => {
 // Download -- handed to the downloader registered for the id's URL scheme.
 // ---------------------------------------------------------------------
 app.get('/api/download', requireAuth, async (req, res) => {
-  const id = (req.query.id || '').trim();
+  const id = queryParam(req, 'id').trim();
   if (!id) return res.status(400).json({ error: 'Missing id parameter' });
 
   // Re-check this specific document is actually visible to this user's
@@ -393,6 +414,19 @@ app.get('/', (req, res) => {
   } else {
     res.sendFile(path.join(__dirname, 'public', 'login.html'));
   }
+});
+
+// Unknown API routes get JSON like every other API response.
+app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
+
+// Last-resort error handler: bad input (BadRequest, or a malformed JSON
+// body from express.json) gets its message; anything else is logged and
+// answered without internals.
+app.use((err, req, res, next) => {
+  const status = err.status || err.statusCode || 500;
+  if (status >= 500) console.error('Unhandled error on', req.method, req.path, '-', err.stack || err);
+  if (res.headersSent) return next(err);
+  res.status(status).json({ error: status < 500 && err.expose ? err.message : 'Internal server error' });
 });
 
 app.listen(PORT, () => {

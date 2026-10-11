@@ -1,6 +1,6 @@
 {
   "name": "frogmouth-search",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Config-driven, LDAP-authenticated search UI for an OpenSearch index, with pluggable file downloads.",
   "license": "Apache-2.0",
   "main": "server.js",
@@ -11,10 +11,10 @@
     "node": ">=20"
   },
   "dependencies": {
-    "express": "^4.19.2",
+    "express": "^5.2.1",
     "express-session": "^1.18.0",
     "ldapjs": "^3.0.7",
-    "js-yaml": "^4.1.0",
+    "js-yaml": "^5.4.3",
     "@marsaud/smb2": "^0.18.0"
   }
 }
