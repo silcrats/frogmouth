@@ -88,6 +88,12 @@ signed-in user can see that document.
   streams a document id to the response, register it in `DOWNLOADERS` under
   its URL scheme, and configure it under `downloads`.
 
+## AI disclosure
+
+This project was developed with the assistance of AI (Claude by Anthropic).
+The code has been reviewed and tested by a human maintainer, but please review
+it before you deploy it.
+
 ## License
 
 Licensed under the [Apache License, Version 2.0](LICENSE). See [NOTICE](NOTICE)
