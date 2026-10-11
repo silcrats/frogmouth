@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Frogmouth Search</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1c1f25;
+    --border: #2a2e36;
+    --text: #e6e8eb;
+    --text-dim: #8b909c;
+    --accent: #5fb3a3;
+    --accent-dim: #3d7a70;
+    --mono: "JetBrains Mono", "SF Mono", Consolas, monospace;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+  }
+
+  .shell {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+  }
+
+  header {
+    margin-bottom: 32px;
+  }
+
+  .label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+
+  h1 {
+    font-size: 28px;
+    font-weight: 600;
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+
+  form.search-form {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  input[type="text"] {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 15px;
+    padding: 13px 16px;
+    border-radius: 6px;
+    font-family: var(--sans);
+    transition: border-color 0.15s ease;
+  }
+
+  input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent-dim);
+  }
+
+  input[type="text"]::placeholder {
+    color: var(--text-dim);
+  }
+
+  button {
+    background: var(--accent);
+    color: #0d1210;
+    border: none;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 0 22px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  button:hover { background: #6fc2b2; }
+  button:disabled { background: var(--border); color: var(--text-dim); cursor: default; }
+
+  .meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    margin: 18px 0 20px;
+    min-height: 16px;
+  }
+
+  .page-size-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .page-size-control select {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .page-size-control select:focus {
+    outline: none;
+    border-color: var(--accent-dim);
+  }
+
+  .results {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .result {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    margin-bottom: 10px;
+    transition: border-color 0.15s ease;
+  }
+
+  .result.open {
+    border-color: var(--accent-dim);
+  }
+
+  .result-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 6px;
+  }
+
+  .result-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    word-break: break-word;
+  }
+
+  .result-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .expand-btn,
+  .download-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: border-color 0.15s ease, color 0.15s ease;
+    text-decoration: none;
+  }
+
+  .expand-btn:hover,
+  .download-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent-dim);
+  }
+
+  .expand-btn .expand-caret {
+    display: inline-block;
+    transition: transform 0.15s ease;
+    font-size: 10px;
+  }
+
+  .result.open .expand-btn {
+    color: var(--accent);
+    border-color: var(--accent-dim);
+  }
+
+  .result.open .expand-btn .expand-caret {
+    transform: rotate(90deg);
+  }
+
+  .result-detail {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 16px;
+    margin-bottom: 16px;
+    font-size: 12.5px;
+  }
+
+  .detail-label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    white-space: nowrap;
+    padding-top: 1px;
+  }
+
+  .detail-value {
+    color: var(--text);
+    word-break: break-word;
+    white-space: pre-line; /* so a multi-line value (e.g. Attachments, one per line) actually breaks visually */
+  }
+
+  .detail-body-label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .detail-body {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 480px;
+    overflow-y: auto;
+  }
+
+  .detail-body mark {
+    background: rgba(95, 179, 163, 0.25);
+    color: var(--text);
+    padding: 0 2px;
+    border-radius: 2px;
+  }
+
+  .result-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+
+  .result-meta span {
+    background: rgba(95, 179, 163, 0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  .result-snippet {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--text-dim);
+  }
+
+  .result-snippet mark {
+    background: rgba(95, 179, 163, 0.25);
+    color: var(--text);
+    padding: 0 2px;
+    border-radius: 2px;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+
+  .empty-state .big {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent-dim);
+    margin-bottom: 10px;
+  }
+
+  .pager {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 28px;
+  }
+
+  .pager button {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font-weight: 500;
+    padding: 8px 18px;
+  }
+
+  .pager button:hover:not(:disabled) { border-color: var(--accent-dim); }
+
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .filters.hidden { display: none; }
+
+  #filterRows {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .filter-controls-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .filter-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+
+  .filter-row select.field-select {
+    min-width: 90px;
+    flex-shrink: 0;
+  }
+
+  .filter-value {
+    width: 100% !important;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .filter-value-wrap {
+    flex: 1 1 0%;
+    min-width: 0;
+    display: block;
+  }
+
+  .remove-row {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 14px;
+    width: 34px;
+    height: 34px;
+    border-radius: 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .remove-row:hover { color: #c96a5a; border-color: #c96a5a; }
+
+  .add-row-btn {
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--text-dim);
+    font-size: 12px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    align-self: flex-start;
+    font-family: var(--mono);
+  }
+
+  .add-row-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
+
+  .logic-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    margin: 2px 0;
+  }
+
+  .logic-toggle .switch {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .logic-toggle button {
+    background: var(--panel);
+    color: var(--text-dim);
+    border: none;
+    font-size: 11px;
+    font-family: var(--mono);
+    padding: 5px 12px;
+    cursor: pointer;
+  }
+
+  .logic-toggle button.active {
+    background: var(--accent);
+    color: #0d1210;
+    font-weight: 700;
+  }
+
+  .date-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .filter-field label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .filters select,
+  .filters input[type="date"],
+  .filters input[type="text"] {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 13px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-family: var(--sans);
+  }
+
+  .filters select:focus,
+  .filters input:focus {
+    outline: none;
+    border-color: var(--accent-dim);
+  }
+
+  .filter-toggle {
+    background: transparent;
+    color: var(--text-dim);
+    border: none;
+    font-size: 12px;
+    padding: 4px 0;
+    margin-bottom: 14px;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--mono);
+  }
+
+  .filter-toggle:hover { color: var(--accent); }
+
+  .filter-toggle .count {
+    display: inline-block;
+    background: var(--accent);
+    color: #0d1210;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 10px;
+    margin-left: 6px;
+  }
+
+  .clear-filters {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    align-self: flex-end;
+  }
+
+  .clear-filters:hover { color: var(--text); border-color: var(--accent-dim); }
+
+  .status-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 6px;
+    background: var(--text-dim);
+  }
+
+  .status-dot.ok { background: var(--accent); }
+  .status-dot.err { background: #c96a5a; }
+</style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
+        <div>
+          <div class="label" id="appLabel"></div>
+          <h1 id="appTitle">Frogmouth Search</h1>
+          <div class="subtitle" id="appSubtitle"></div>
+        </div>
+        <div style="text-align:right; padding-top:4px;">
+          <div id="whoami" style="font-family:var(--mono); font-size:12px; color:var(--text-dim); margin-bottom:6px;"></div>
+          <button type="button" id="logoutBtn" style="background:transparent; border:1px solid var(--border); color:var(--text-dim); font-size:11px; font-family:var(--mono); padding:5px 10px; border-radius:6px; cursor:pointer;">Sign out</button>
+        </div>
+      </div>
+    </header>
+
+    <form class="search-form" id="searchForm">
+      <input type="text" id="queryInput" placeholder="Search…" autocomplete="off" autofocus>
+      <button type="submit" id="searchBtn">Search</button>
+    </form>
+
+    <div class="logic-toggle" id="scopeToggle" style="margin-bottom:10px;">
+      Search in:
+      <div class="switch">
+        <button type="button" data-scope="" class="active">All</button>
+        <!-- one button per configured source, added from /api/config -->
+      </div>
+    </div>
+
+    <button type="button" class="filter-toggle" id="filterToggle">
+      &darr; Filters <span class="count" id="filterCount" style="display:none;"></span>
+    </button>
+
+    <div class="filters hidden" id="filters">
+      <div id="filterRows"></div>
+      <div class="filter-controls-row">
+        <button type="button" class="add-row-btn" id="addFilterRow">+ Add filter</button>
+        <div class="logic-toggle" id="logicToggle" style="display:none;">
+          Match:
+          <div class="switch">
+            <button type="button" id="logicAndBtn" class="active">ALL (AND)</button>
+            <button type="button" id="logicOrBtn">ANY (OR)</button>
+          </div>
+        </div>
+      </div>
+      <div class="filter-field">
+        <label>Date range</label>
+        <div class="date-row">
+          <input type="date" id="dateFromFilter" title="After">
+          <input type="date" id="dateToFilter" title="Before">
+        </div>
+      </div>
+      <button type="button" class="clear-filters" id="clearFilters">Clear all filters</button>
+    </div>
+
+    <div class="meta-row">
+      <span id="metaRow"></span>
+      <div class="page-size-control">
+        <label for="pageSizeSelect">Show</label>
+        <select id="pageSizeSelect">
+          <option value="10">10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="results" id="results">
+      <div class="empty-state">
+        <div class="big">// ready</div>
+        Enter a search term above to query the index.
+      </div>
+    </div>
+
+    <div class="pager" id="pager" style="display:none;">
+      <button id="prevBtn">&larr; Previous</button>
+      <button id="nextBtn">Next &rarr;</button>
+    </div>
+  </div>
+
+<script>
+  const form = document.getElementById('searchForm');
+  const input = document.getElementById('queryInput');
+  const resultsEl = document.getElementById('results');
+  const metaRow = document.getElementById('metaRow');
+  const pager = document.getElementById('pager');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const searchBtn = document.getElementById('searchBtn');
+  const pageSizeSelect = document.getElementById('pageSizeSelect');
+
+  let ROWS_PER_PAGE = parseInt(pageSizeSelect.value, 10) || 10;
+  let currentQuery = '';
+  let currentStart = 0;
+  let currentTotal = 0;
+  // True once a search has actually been run (Search pressed, or a filter/date
+  // touched). currentQuery alone can't gate this anymore -- a blank query is now
+  // valid once filters are doing the work, so `if (currentQuery)` would wrongly
+  // skip re-running a filter-only browse. Stays false on page load so nothing
+  // runs before the user does something.
+  let hasSearched = false;
+
+  async function apiFetch(url, opts) {
+    const res = await fetch(url, opts);
+    if (res.status === 401) {
+      window.location.href = '/';
+      throw new Error('Session expired');
+    }
+    return res;
+  }
+
+  (async () => {
+    try {
+      const res = await apiFetch('/api/whoami');
+      const data = await res.json();
+      document.getElementById('whoami').textContent = data.displayName || data.username;
+    } catch (err) { /* redirect already in flight */ }
+  })();
+
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await fetch('/api/logout', { method: 'POST' });
+    window.location.href = '/';
+  });
+
+  const filterToggle = document.getElementById('filterToggle');
+  const filterCount = document.getElementById('filterCount');
+  const filtersPanel = document.getElementById('filters');
+  const filterRowsEl = document.getElementById('filterRows');
+  const addFilterRowBtn = document.getElementById('addFilterRow');
+  const logicToggle = document.getElementById('logicToggle');
+  const logicAndBtn = document.getElementById('logicAndBtn');
+  const logicOrBtn = document.getElementById('logicOrBtn');
+  const dateFromFilter = document.getElementById('dateFromFilter');
+  const dateToFilter = document.getElementById('dateToFilter');
+  const clearFiltersBtn = document.getElementById('clearFilters');
+
+  // Everything below that depends on the index layout -- filter list, source
+  // scopes, type groups -- is filled in from /api/config (config.yaml) by
+  // applyConfig() before anything else runs.
+  let CONFIG = { app: {}, sources: [], filters: [], types: { groups: [], aliases: {} } };
+  let FIELD_LABELS = {};        // filter key -> label
+  let FILTER_PLACEHOLDERS = {}; // filter key -> placeholder for free-text filters
+  let SOURCES_BY_HOST = {};     // doc.source value -> source config
+  let typeOptions = [];     // populated from /api/facets
+  let shareOptions = [];    // populated from /api/facets
+  let filterRows = [];      // [{ id, field, value }]
+  let filterLogic = 'AND';
+  let rowIdCounter = 0;
+
+  // Source scope: '' = everything, otherwise a configured source's key. Used
+  // here to hide Source dropdown options that don't belong to the selected
+  // scope; the server applies the same scope to the query itself.
+  let SCOPE_HOSTS = {}; // source key -> doc.source value
+  const scopeToggle = document.getElementById('scopeToggle');
+  const scopeSwitch = scopeToggle.querySelector('.switch');
+  let searchScope = '';
+  scopeSwitch.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-scope]');
+    if (!btn) return;
+    searchScope = btn.dataset.scope;
+    scopeSwitch.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+    // A Source value picked under the old scope may not exist in the new one
+    // (e.g. a file share selected, then switching to Mail) -- clear it rather
+    // than silently keep filtering on a source the dropdown no longer shows.
+    // Re-render regardless of whether anything was cleared: any already-open
+    // Source dropdown's option list also needs to reflect the new scope.
+    const wantedHost = SCOPE_HOSTS[searchScope];
+    filterRows.forEach(row => {
+      if (row.field !== 'share' || !row.value) return;
+      const stillValid = shareOptions.some(o => o.value === row.value && (!wantedHost || o.source === wantedHost));
+      if (!stillValid) row.value = '';
+    });
+    renderFilterRows();
+    updateFilterCount();
+    loadFacets();
+    if (hasSearched) runSearch(currentQuery, 0);
+  });
+
+  function activeFilterCount() {
+    const rowCount = filterRows.filter(r => r.value.trim()).length;
+    const dateCount = [dateFromFilter.value, dateToFilter.value].filter(Boolean).length;
+    return rowCount + dateCount;
+  }
+
+  // Tracks the Source-filter count across calls so the AND->OR nudge below
+  // only fires on the transition into "2 or more", not every time this runs
+  // while already there -- see updateFilterCount.
+  let prevShareFilterCount = 0;
+
+  function updateFilterCount() {
+    const n = activeFilterCount();
+    if (n > 0) {
+      filterCount.style.display = 'inline-block';
+      filterCount.textContent = n;
+    } else {
+      filterCount.style.display = 'none';
+    }
+    logicToggle.style.display = filterRows.length > 1 ? 'flex' : 'none';
+
+    // Two (or more) different Source filters can never both match the same
+    // document under AND logic -- a file/mailbox/site only ever has one
+    // `share` value, so that combination always returns zero results.
+    // Nudge to OR the moment a second Source filter appears, but only on
+    // that transition (crossing from fewer than 2 up to 2+) -- if the user
+    // deliberately switches back to AND afterward, this won't immediately
+    // override them again just because a later, unrelated filter changes.
+    const shareCount = filterRows.filter(r => r.field === 'share' && r.value.trim()).length;
+    if (prevShareFilterCount < 2 && shareCount >= 2 && filterLogic === 'AND') {
+      filterLogic = 'OR';
+      logicOrBtn.classList.add('active');
+      logicAndBtn.classList.remove('active');
+    }
+    prevShareFilterCount = shareCount;
+  }
+
+  function byValueAlpha(a, b) {
+    return a.value.localeCompare(b.value, undefined, { sensitivity: 'base' });
+  }
+
+  // Display-only override for a dropdown option's text -- the underlying
+  // value (what's actually sent as the filter) stays e.g. "jpg"; only the
+  // label changes. Built from types.aliases ("jpg/jpeg") and the group
+  // labels in config.yaml.
+  let VALUE_LABELS = {};
+  // Fixed order for the broader categories (types.groups) -- shown above
+  // the individual types rather than sorted in among them.
+  let TYPE_GROUP_ORDER = [];
+  const DROPDOWN_FIELDS = {
+    type: {
+      options: () => {
+        const groups = TYPE_GROUP_ORDER.map(key => typeOptions.find(o => o.value === key)).filter(Boolean);
+        const individual = typeOptions.filter(o => !TYPE_GROUP_ORDER.includes(o.value)).sort(byValueAlpha);
+        return [...groups, ...individual];
+      },
+      placeholder: 'Choose a type…',
+    },
+    share: {
+      // Only shares that belong to the currently selected source scope --
+      // picking "Mail" shouldn't still offer file share names to filter by.
+      options: () => {
+        const wantedHost = SCOPE_HOSTS[searchScope];
+        const inScope = wantedHost ? shareOptions.filter(o => o.source === wantedHost) : shareOptions;
+        return inScope.slice().sort(byValueAlpha);
+      },
+      placeholder: 'Choose a source…',
+    },
+  };
+
+  function buildValueInput(row) {
+    const dropdown = DROPDOWN_FIELDS[row.field];
+    if (dropdown) {
+      const select = document.createElement('select');
+      select.className = 'filter-value';
+      select.innerHTML = `<option value="">${escapeHtml(dropdown.placeholder)}</option>` +
+        dropdown.options().map(({ value, count }) =>
+          `<option value="${escapeHtml(value)}" ${row.value === value ? 'selected' : ''}>${escapeHtml(VALUE_LABELS[value] || value)} (${count})</option>`
+        ).join('');
+      select.addEventListener('change', () => {
+        row.value = select.value;
+        updateFilterCount();
+        loadFacets();
+        if (hasSearched) runSearch(currentQuery, 0);
+      });
+      return select;
+    }
+    const input = document.createElement('input');
+    input.className = 'filter-value';
+    input.type = 'text';
+    input.placeholder = FILTER_PLACEHOLDERS[row.field] || '';
+    input.value = row.value;
+    let debounceTimer;
+    input.addEventListener('input', () => {
+      row.value = input.value;
+      updateFilterCount();
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        loadFacets();
+        if (hasSearched) runSearch(currentQuery, 0);
+      }, 400);
+    });
+    return input;
+  }
+
+  function renderFilterRows() {
+    filterRowsEl.innerHTML = '';
+    filterRows.forEach(row => {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'filter-row';
+
+      const fieldSelect = document.createElement('select');
+      fieldSelect.className = 'field-select';
+      fieldSelect.innerHTML = Object.entries(FIELD_LABELS)
+        .map(([val, label]) => `<option value="${val}" ${row.field === val ? 'selected' : ''}>${label}</option>`)
+        .join('');
+      fieldSelect.addEventListener('change', () => {
+        row.field = fieldSelect.value;
+        renderFilterRows();
+        updateFilterCount();
+        loadFacets();
+        if (hasSearched) runSearch(currentQuery, 0);
+      });
+
+      const valueWrap = document.createElement('div');
+      valueWrap.className = 'filter-value-wrap';
+      valueWrap.appendChild(buildValueInput(row));
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'remove-row';
+      removeBtn.textContent = '×';
+      removeBtn.addEventListener('click', () => {
+        filterRows = filterRows.filter(r => r.id !== row.id);
+        renderFilterRows();
+        updateFilterCount();
+        loadFacets();
+        if (hasSearched) runSearch(currentQuery, 0);
+      });
+
+      rowEl.appendChild(fieldSelect);
+      rowEl.appendChild(valueWrap);
+      rowEl.appendChild(removeBtn);
+      filterRowsEl.appendChild(rowEl);
+    });
+  }
+
+  addFilterRowBtn.addEventListener('click', () => {
+    const firstField = Object.keys(FIELD_LABELS)[0];
+    if (!firstField) return;
+    filterRows.push({ id: ++rowIdCounter, field: firstField, value: '' });
+    renderFilterRows();
+    updateFilterCount();
+  });
+
+  filterToggle.addEventListener('click', () => {
+    filtersPanel.classList.toggle('hidden');
+  });
+
+  logicAndBtn.addEventListener('click', () => {
+    filterLogic = 'AND';
+    logicAndBtn.classList.add('active');
+    logicOrBtn.classList.remove('active');
+    loadFacets();
+    if (hasSearched) runSearch(currentQuery, 0);
+  });
+
+  logicOrBtn.addEventListener('click', () => {
+    filterLogic = 'OR';
+    logicOrBtn.classList.add('active');
+    logicAndBtn.classList.remove('active');
+    loadFacets();
+    if (hasSearched) runSearch(currentQuery, 0);
+  });
+
+  clearFiltersBtn.addEventListener('click', () => {
+    filterRows = [];
+    filterLogic = 'AND';
+    logicAndBtn.classList.add('active');
+    logicOrBtn.classList.remove('active');
+    dateFromFilter.value = '';
+    dateToFilter.value = '';
+    renderFilterRows();
+    updateFilterCount();
+    loadFacets();
+    if (hasSearched) runSearch(currentQuery, 0);
+  });
+
+  [dateFromFilter, dateToFilter].forEach(el => {
+    el.addEventListener('change', () => {
+      updateFilterCount();
+      loadFacets();
+      if (hasSearched) runSearch(currentQuery, 0);
+    });
+  });
+
+  // Populate the file-type dropdown from whatever mimetypes actually exist
+  // in the index right now, rather than a hardcoded guess -- and, since this
+  // is called again on every filter/scope/date change (see currentFilterParams),
+  // Type's counts narrow to match whatever else is currently selected (the
+  // server excludes the Type filter's own value when computing them, so
+  // picking a type doesn't shrink the very list it was chosen from).
+  async function loadFacets() {
+    try {
+      const res = await apiFetch(`/api/facets?${currentFilterParams().toString()}`);
+      const data = await res.json();
+      typeOptions = data.types || [];
+      shareOptions = data.shares || [];
+      // Refresh any already-rendered Type/Source dropdown with the new counts
+      // (and, for Source, any scope-based option filtering) without losing
+      // the current selection -- renderFilterRows rebuilds from filterRows,
+      // which still holds each row's existing value. Skipped while a
+      // free-text filter (from/to/attachments) is focused: this fires after
+      // every debounced keystroke, and rebuilding the row would steal focus
+      // mid-edit. The fresh counts still apply next time anything else
+      // re-renders the rows.
+      const active = document.activeElement;
+      const isTypingFreeText = active && active.tagName === 'INPUT' && active.classList.contains('filter-value');
+      if (!isTypingFreeText) renderFilterRows();
+    } catch (err) {
+      console.warn('Could not load type/share filters:', err);
+    }
+  }
+
+  function applyConfig(cfg) {
+    CONFIG = cfg;
+    const app = cfg.app || {};
+    if (app.title) {
+      document.title = app.title;
+      document.getElementById('appTitle').textContent = app.title;
+    }
+    document.getElementById('appLabel').textContent = app.label || '';
+    document.getElementById('appSubtitle').textContent = app.subtitle || '';
+    if (app.search_placeholder) input.placeholder = app.search_placeholder;
+
+    SCOPE_HOSTS = {};
+    SOURCES_BY_HOST = {};
+    (cfg.sources || []).forEach(src => {
+      SCOPE_HOSTS[src.key] = src.host;
+      SOURCES_BY_HOST[src.host] = src;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.dataset.scope = src.key;
+      btn.textContent = src.label || src.key;
+      scopeSwitch.appendChild(btn);
+    });
+    // A single source has nothing to scope between.
+    scopeToggle.style.display = (cfg.sources || []).length > 1 ? '' : 'none';
+
+    FIELD_LABELS = {};
+    FILTER_PLACEHOLDERS = {};
+    (cfg.filters || []).forEach(f => {
+      FIELD_LABELS[f.key] = f.label || f.key;
+      if (f.placeholder) FILTER_PLACEHOLDERS[f.key] = f.placeholder;
+    });
+
+    const types = cfg.types || {};
+    VALUE_LABELS = {};
+    Object.entries(types.aliases || {}).forEach(([key, values]) => { VALUE_LABELS[key] = values.join('/'); });
+    TYPE_GROUP_ORDER = (types.groups || []).map(g => g.key);
+    (types.groups || []).forEach(g => { VALUE_LABELS[g.key] = g.label || g.key; });
+  }
+
+  (async () => {
+    try {
+      const res = await apiFetch('/api/config');
+      applyConfig(await res.json());
+    } catch (err) {
+      console.warn('Could not load UI config:', err);
+    }
+    loadFacets();
+  })();
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  function firstOf(val) {
+    return Array.isArray(val) ? val[0] : val;
+  }
+
+  function allOf(val) {
+    if (val === undefined || val === null) return [];
+    return Array.isArray(val) ? val : [val];
+  }
+
+  // Extracted text (especially from PDFs, .eml, and Word docs) very
+  // often has long runs of blank/whitespace-only lines from page layout,
+  // email header blocks, etc. This is purely cosmetic for the expanded
+  // view — what's indexed is unaffected. 3+ consecutive blank lines
+  // collapse to a single blank line; whitespace-only lines count as blank.
+  function collapseBlankLines(text) {
+    return text.replace(/(?:[ \t]*\r?\n){3,}/g, '\n\n');
+  }
+
+  // Highlights every whole occurrence of each query term in the full
+  // body text, so the expanded view gets the same visual cue as the
+  // short server-generated snippet, without a second request.
+  function highlightBody(text, query) {
+    const escaped = escapeHtml(collapseBlankLines(text));
+    const terms = (query || '')
+      .split(/\s+/)
+      .map(t => t.trim())
+      .filter(Boolean)
+      .map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .sort((a, b) => b.length - a.length); // longest first avoids partial-nesting
+    if (!terms.length) return escaped;
+    const re = new RegExp(`(${terms.join('|')})`, 'gi');
+    return escaped.replace(re, '<mark>$1</mark>');
+  }
+
+  function fmtDate(val) {
+    if (!val) return null;
+    const d = new Date(firstOf(val));
+    if (isNaN(d)) return null;
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  // Full date + time, in the viewer's own locale/timezone -- used in the
+  // expanded detail view's Created/Modified rows, as opposed to fmtDate's
+  // shorter date-only form used in the compact result-row summary line.
+  function fmtDateTime(val) {
+    if (!val) return null;
+    const d = new Date(firstOf(val));
+    if (isNaN(d)) return null;
+    return d.toLocaleString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+    });
+  }
+
+  function renderResults(data) {
+    resultsEl.innerHTML = '';
+
+    if (!data.docs || data.docs.length === 0) {
+      const emptyMsg = currentQuery
+        ? `Nothing found for "${escapeHtml(currentQuery)}". Try a different term.`
+        : 'Nothing matches the selected filters. Try broadening them.';
+      resultsEl.innerHTML = `
+        <div class="empty-state">
+          <div class="big">// no matches</div>
+          ${emptyMsg}
+        </div>`;
+      pager.style.display = 'none';
+      return;
+    }
+
+    data.docs.forEach(doc => {
+      // Per-source behavior comes from sources[] in config.yaml, matched on
+      // doc.source. An unknown source falls back to a plain download.
+      const src = SOURCES_BY_HOST[firstOf(doc.source)] || {};
+      // layout: email -- the indexed title is the subject plus a synthetic
+      // ".eml", so the real subject is shown instead.
+      const isMail = src.layout === 'email';
+      // open: link -- doc.id is the item's own web URL (only usable if it's an
+      // https URL -- guards against a malformed/unexpected value). The folder
+      // link is derived by dropping the last path segment (the filename).
+      const openLink = src.open === 'link' && /^https:\/\//i.test(doc.id) ? doc.id : null;
+      const folderLink = openLink && src.folder_link ? openLink.replace(/\/[^/]*$/, '') : null;
+      // A standalone image has one camera/location (scalar fields); an email
+      // can carry several photo attachments, each with its own (list-valued
+      // fields, aligned by index within each family -- see
+      // Pelican's extract_text._aggregate_image_attachments). allOf() treats a scalar
+      // as a one-item list, so the same code covers both cases.
+      const cameraMakes = allOf(doc.image_camera_make);
+      const cameraModels = allOf(doc.image_camera_model);
+      const camera = Array.from({ length: Math.max(cameraMakes.length, cameraModels.length) },
+        (_, i) => [cameraMakes[i], cameraModels[i]].filter(Boolean).join(' ')
+      ).filter(Boolean).join(', ');
+      const gpsLats = allOf(doc.image_gps_lat);
+      const gpsLons = allOf(doc.image_gps_lon);
+      const locations = allOf(doc.image_location);
+      const locationValue = locations.map((loc, i) => {
+        const lat = gpsLats[i], lon = gpsLons[i];
+        const coord = (lat !== undefined && lon !== undefined) ? `${Number(lat).toFixed(4)}, ${Number(lon).toFixed(4)}` : null;
+        return loc && coord ? `${loc} (${coord})` : (loc || coord);
+      }).filter(Boolean).join('; ');
+      const title = (isMail && firstOf(doc.email_subject)) || firstOf(doc.title) || firstOf(doc.email_subject) || firstOf(doc.filename) || doc.id.split('/').pop() || 'Untitled';
+      const mimetype = firstOf(doc.type);
+      const created = fmtDate(doc.created);
+      const sender = firstOf(doc.email_from);
+      const share = firstOf(doc.share);
+
+      const hl = (data.highlighting && data.highlighting[doc.id] && data.highlighting[doc.id].content)
+        ? data.highlighting[doc.id].content.join(' … ')
+        : (firstOf(doc.content) || '').slice(0, 240);
+
+      const metaParts = [];
+      if (share) metaParts.push(`<span>${escapeHtml(share)}</span>`);
+      if (sender) metaParts.push(`<span>${escapeHtml(sender)}</span>`);
+      if (mimetype) metaParts.push(`<span>${escapeHtml(mimetype)}</span>`);
+      if (created) metaParts.push(`<span>${created}</span>`);
+      if (allOf(doc.email_attachments).length) metaParts.push(`<span title="Has attachments">&#128206; ${allOf(doc.email_attachments).length}</span>`);
+
+      // Build the full-detail fields shown once expanded. Anything not
+      // present on this doc is simply skipped rather than shown blank.
+      // Full date+time here (unlike the compact summary line above, which
+      // keeps the shorter date-only fmtDate for created).
+      const createdFull = fmtDateTime(doc.created);
+      const modifiedFull = fmtDateTime(doc.modified);
+      const fullBody = firstOf(doc.content) || '';
+      const sizeBytes = firstOf(doc.size);
+      const sizeStr = sizeBytes ? `${(sizeBytes / 1024).toFixed(1)} KB` : null;
+      const subject = firstOf(doc.email_subject);
+      const toList = allOf(doc.email_to).join(', ');
+      const ccList = allOf(doc.email_cc).join(', ');
+      const attachmentsList = allOf(doc.email_attachments).join('\n');
+      const messageId = firstOf(doc.email_message_id);
+
+      const detailFields = [
+        // Title and Subject are the same value for mail (the indexed title is
+        // just the subject plus a synthetic ".eml") -- only show one.
+        [isMail ? null : 'Title', title],
+        [src.share_label || 'Source', share],
+        ['Subject', subject],
+        ['From', sender],
+        ['To', toList],
+        ['CC', ccList],
+        ['Attachments', attachmentsList],
+        ['Message-ID', isMail ? messageId : null],
+        ['Camera', camera],
+        ['Location', locationValue],
+        ['Type', mimetype],
+        ['Size', sizeStr],
+        ['Created', createdFull],
+        // Mail has no independent "modified" separate from when it was received.
+        [isMail ? null : 'Modified', modifiedFull],
+        // A mail web link isn't a meaningful "path" -- the open-link button covers it.
+        ['Path', isMail ? null : doc.id]
+      ].filter(([label, v]) => label && v);
+
+      const detailGridHtml = detailFields.map(([label, value]) => `
+        <div class="detail-label">${escapeHtml(label)}</div>
+        <div class="detail-value">${escapeHtml(String(value))}</div>
+      `).join('');
+
+      const bodyHtml = fullBody
+        ? highlightBody(fullBody, currentQuery)
+        : '<em>No content available for this document.</em>';
+
+      // Built up rather than a single ternary: link sources with folder_link
+      // get two buttons side by side (open the item itself, or its containing
+      // folder), where other results only ever get one.
+      let actionButtonsHtml;
+      if (src.open === 'link') {
+        const linkLabel = src.link_label || 'Open';
+        const buttons = [];
+        if (openLink) {
+          buttons.push(`<a class="download-btn" href="${escapeHtml(openLink)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(linkLabel)}">&#8599; ${escapeHtml(linkLabel)}</a>`);
+        }
+        if (folderLink) {
+          buttons.push(`<a class="download-btn" href="${escapeHtml(folderLink)}" target="_blank" rel="noopener noreferrer" title="Open this item's folder">&#128193; Open folder</a>`);
+        }
+        actionButtonsHtml = buttons.join('');
+      } else {
+        actionButtonsHtml = `<a class="download-btn" href="/api/download?id=${encodeURIComponent(doc.id)}" title="Download original file">
+              &#8595; Download
+            </a>`;
+      }
+
+      const div = document.createElement('div');
+      div.className = 'result';
+      div.innerHTML = `
+        <div class="result-header">
+          <div class="result-title">${escapeHtml(title)}</div>
+          <div class="result-actions">
+            ${actionButtonsHtml}
+            <button type="button" class="expand-btn">
+              <span class="expand-label">Expand</span><span class="expand-caret">&#9656;</span>
+            </button>
+          </div>
+        </div>
+        ${metaParts.length ? `<div class="result-meta">${metaParts.join('')}</div>` : ''}
+        <div class="result-snippet">${hl || '<em>No preview available</em>'}</div>
+        <div class="result-detail" style="display:none;">
+          <div class="detail-grid">${detailGridHtml}</div>
+          <div class="detail-body-label">Full content</div>
+          <div class="detail-body">${bodyHtml}</div>
+        </div>
+      `;
+
+      const expandBtn = div.querySelector('.expand-btn');
+      const expandLabel = div.querySelector('.expand-label');
+      expandBtn.addEventListener('click', () => {
+        const isOpen = div.classList.toggle('open');
+        div.querySelector('.result-detail').style.display = isOpen ? 'block' : 'none';
+        expandLabel.textContent = isOpen ? 'Collapse' : 'Expand';
+      });
+
+      resultsEl.appendChild(div);
+    });
+
+    pager.style.display = data.numFound > ROWS_PER_PAGE ? 'flex' : 'none';
+    prevBtn.disabled = currentStart === 0;
+    nextBtn.disabled = currentStart + ROWS_PER_PAGE >= data.numFound;
+  }
+
+  // Shared by runSearch and loadFacets, so the Type dropdown's counts are
+  // always computed against exactly the same filter/scope/date state a
+  // search would actually use.
+  function currentFilterParams() {
+    const params = new URLSearchParams();
+    const activeRows = filterRows.filter(r => r.value.trim());
+    if (activeRows.length) {
+      params.set('filters', JSON.stringify(activeRows.map(r => ({ field: r.field, value: r.value.trim() }))));
+      params.set('logic', filterLogic);
+    }
+    if (searchScope) params.set('scope', searchScope);
+    if (dateFromFilter.value) params.set('dateFrom', dateFromFilter.value);
+    if (dateToFilter.value) params.set('dateTo', dateToFilter.value);
+    return params;
+  }
+
+  async function runSearch(q, start = 0) {
+    currentQuery = q;
+    currentStart = start;
+    hasSearched = true;
+    searchBtn.disabled = true;
+    metaRow.textContent = 'Searching…';
+
+    try {
+      const searchParams = currentFilterParams();
+      searchParams.set('q', q);
+      searchParams.set('start', String(start));
+      searchParams.set('rows', String(ROWS_PER_PAGE));
+
+      const res = await apiFetch(`/api/search?${searchParams.toString()}`);
+      const data = await res.json();
+
+      if (data.error) {
+        metaRow.innerHTML = `<span class="status-dot err"></span>Search failed: ${escapeHtml(data.error)}`;
+        resultsEl.innerHTML = `<div class="empty-state"><div class="big">// error</div>Could not reach the search index. Check that OpenSearch is running.</div>`;
+        pager.style.display = 'none';
+        return;
+      }
+
+      currentTotal = data.numFound;
+      const rangeEnd = Math.min(start + ROWS_PER_PAGE, data.numFound);
+      metaRow.innerHTML = data.numFound > 0
+        ? `<span class="status-dot ok"></span>${data.numFound.toLocaleString()} result${data.numFound === 1 ? '' : 's'} — showing ${start + 1}–${rangeEnd}`
+        : `<span class="status-dot ok"></span>0 results`;
+
+      renderResults(data);
+    } catch (err) {
+      metaRow.innerHTML = `<span class="status-dot err"></span>Connection error`;
+      resultsEl.innerHTML = `<div class="empty-state"><div class="big">// error</div>Could not reach the search service.</div>`;
+      pager.style.display = 'none';
+    } finally {
+      searchBtn.disabled = false;
+    }
+  }
+
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    // A blank query is valid: with filters set this browses just what matches
+    // them, and with none set it lists everything the signed-in user can see --
+    // leave Search blank and let the filters do the work.
+    runSearch(input.value.trim(), 0);
+  });
+
+  prevBtn.addEventListener('click', () => {
+    if (currentStart > 0) runSearch(currentQuery, Math.max(0, currentStart - ROWS_PER_PAGE));
+  });
+
+  nextBtn.addEventListener('click', () => {
+    if (currentStart + ROWS_PER_PAGE < currentTotal) runSearch(currentQuery, currentStart + ROWS_PER_PAGE);
+  });
+
+  pageSizeSelect.addEventListener('change', () => {
+    ROWS_PER_PAGE = parseInt(pageSizeSelect.value, 10) || 10;
+    // Changing page size while sitting mid-list would produce a
+    // confusing start offset, so jump back to the first page.
+    if (hasSearched) runSearch(currentQuery, 0);
+  });
+</script>
+</body>
+</html>

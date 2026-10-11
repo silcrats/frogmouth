@@ -1,0 +1,33 @@
+# Example deployment of Frogmouth in front of an existing OpenSearch index
+# (e.g. one fed by Pelican).
+#
+#   cp .env.example .env            # LDAP, session secret, SMB credentials
+#   cp /path/to/pelican/config/shares.yaml ./shares.yaml   # for downloads
+#   docker compose -f docker-compose.example.yml up -d --build
+#
+# OpenSearch must be reachable at OS_HOST. If it runs in another compose
+# project, join that project's network instead of `search` below.
+
+services:
+  frogmouth:
+    build: .
+    container_name: frogmouth
+    env_file: .env
+    environment:
+      SHARES_CONFIG: /app/shares.yaml
+    volumes:
+      # SMB server/share definitions for downloads; omit to disable them.
+      - ./shares.yaml:/app/shares.yaml:ro
+      # Optional: your own config.yaml, and a logo for app.logo.
+      # - ./config.local/config.yaml:/app/config.yaml:ro
+      # - ./branding:/app/public/branding:ro
+    ports:
+      - "3000:3000"
+    networks: [search]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+    restart: unless-stopped
+
+networks:
+  search:

@@ -1,0 +1,210 @@
+# ---------------------------------------------------------------------
+# Frogmouth Search configuration
+#
+# Everything that ties the UI to a particular index layout lives here, so
+# the same server can sit in front of any OpenSearch index -- point it at
+# a different index, rename fields, add/remove sources -- without code
+# changes.
+#
+# Any string value may reference an environment variable:
+#   ${VAR}            -> value of VAR (empty if unset)
+#   ${VAR:-fallback}  -> value of VAR, or "fallback" if unset/empty
+# Secrets (session secret, LDAP, SMB credentials) should come from env.
+#
+# Override the path to this file with the CONFIG_PATH env var.
+# ---------------------------------------------------------------------
+
+app:
+  title: "Frogmouth Search"
+  label: "opensearch"
+  subtitle: "Search crawled documents, emails, and files"
+  search_placeholder: "Search subject, sender, content…"
+  # Optional logo on the sign-in page: any URL, or a file mounted into the
+  # container under /app/public/branding/ (e.g. "/branding/logo.png").
+  # logo: "/branding/logo.png"
+
+opensearch:
+  host: "${OS_HOST:-http://opensearch:9200}"
+  index: "${SEARCH_INDEX:-documents}"
+
+session:
+  secret: "${SESSION_SECRET:-change-me-in-.env}"
+
+# ---------------------------------------------------------------------
+# Authentication. Only "ldap" is implemented (lib/auth/ldap.js); a new
+# provider just needs to export authenticate(username, password) ->
+# { username, groups }.
+# ---------------------------------------------------------------------
+auth:
+  provider: ldap
+  ldap:
+    # bind_template uses {username} as a placeholder, e.g.
+    #   "{username}@yourdomain.local"                    (AD UPN style)
+    #   "CN={username},CN=Users,DC=yourdomain,DC=local"  (full DN style)
+    url: "${LDAP_URL:-ldap://REPLACE_ME:389}"
+    bind_template: "${LDAP_BIND_TEMPLATE:-{username}@REPLACE_ME.local}"
+    base_dn: "${LDAP_BASE_DN:-DC=REPLACE_ME,DC=local}"
+    username_attr: "${LDAP_USERNAME_ATTR:-sAMAccountName}"
+
+# ---------------------------------------------------------------------
+# Document-level security. Every query is filtered to documents whose
+# role_field contains at least one of the signed-in user's roles. Roles
+# are built server-side at login as:
+#   <prefixes.role><each default_roles entry>
+#   <prefixes.user><username>          (lower-cased if lowercase_username)
+#   <prefixes.group><each group name>
+# These must match whatever the indexer writes into role_field -- for
+# Pelican, roles.prefixes in Pelican's config/pelican.yaml, with
+# default_roles holding its roles.everyone value.
+# ---------------------------------------------------------------------
+security:
+  role_field: role
+  prefixes:
+    user: "1"
+    group: "2"
+    role: "R"
+  default_roles: [guest]
+  lowercase_username: true
+
+# ---------------------------------------------------------------------
+# Index field mapping: the UI's own name (left) -> the field in the
+# index (right). Results are returned to the browser under the left-hand
+# names, so only this block changes for a differently-shaped index.
+#   id      unique document id; also what downloads/links resolve from
+#   source  which source/crawler a doc came from -- matched by sources[].host
+#   share   share / mailbox / site name -- the "Source" filter
+# ---------------------------------------------------------------------
+fields:
+  id: url
+  source: host
+  share: share
+  title: title
+  filename: filename
+  type: filetype
+  created: timestamp
+  modified: last_modified
+  size: content_length
+  content: content
+
+# Extra fields returned as-is for display when present (email headers,
+# image metadata). Missing fields are simply not shown.
+extra_fields:
+  - mimetype
+  - email_from
+  - email_to
+  - email_cc
+  - email_subject
+  - email_attachments
+  - email_message_id
+  - image_camera_make
+  - image_camera_model
+  - image_gps_lat
+  - image_gps_lon
+  - image_location
+
+# Fields the search box queries, with optional ^boost.
+search_fields:
+  - content
+  - title^2
+  - filename^2
+  - email_subject^2
+  - email_from
+  - email_to
+  - email_cc
+  - email_attachments^1.5
+
+# ---------------------------------------------------------------------
+# Sources -- one "Search in:" button each (plus "All"). host is the
+# value of fields.source that identifies the source's documents -- for
+# Pelican, the matching entry under sources: in Pelican's config/pelican.yaml.
+#   open: download  -> Download button, served by a downloader matched
+#                      on the id's URL scheme (see downloads below)
+#   open: link      -> id is an https URL opened directly in a new tab
+#   link_label      -> text for the link button
+#   folder_link     -> also offer a link to the id's parent folder
+#   layout: email   -> show subject as title, Mailbox/Message-ID rows,
+#                      hide Modified/Path
+#   share_label     -> label for the share row in the expanded view
+# ---------------------------------------------------------------------
+sources:
+  - key: files
+    label: SMB
+    host: smb-share
+    open: download
+  - key: mail
+    label: Mail
+    host: exchange-online
+    open: link
+    link_label: "Open in Outlook"
+    layout: email
+    share_label: Mailbox
+  - key: sharepoint
+    label: SharePoint
+    host: sharepoint-online
+    open: link
+    link_label: "Open in SharePoint"
+    folder_link: true
+
+# ---------------------------------------------------------------------
+# Filters offered under "+ Add filter". The keys "type" and "share" are
+# built in (dropdowns populated from fields.type / fields.share facets);
+# any other entry is a free-text, case-insensitive substring match on
+# `field` (needs a .keyword sub-field, which OpenSearch's dynamic mapping
+# adds to every string field).
+# ---------------------------------------------------------------------
+filters:
+  - key: type
+    label: File type
+  - key: share
+    label: Source
+  - key: from
+    label: From
+    field: email_from
+    placeholder: "e.g. john@company.com"
+  - key: to
+    label: To
+    field: email_to
+    placeholder: "e.g. jane@company.com"
+  - key: cc
+    label: CC
+    field: email_cc
+    placeholder: "e.g. jane@company.com"
+  - key: attachments
+    label: Attachments
+    field: email_attachments
+    placeholder: "e.g. invoice.pdf"
+
+# ---------------------------------------------------------------------
+# File types. aliases merge values that are the same format under
+# different extensions into one option (keyed by the alias name).
+# groups are broader categories listed, in this order, above the
+# individual types; each matches any of its members.
+# ---------------------------------------------------------------------
+types:
+  aliases:
+    jpg: [jpg, jpeg]
+  groups:
+    - key: images
+      label: Images
+      members: [jpg, jpeg, tif, tiff, png, webp, gif]
+    - key: documents
+      label: Documents
+      members: [pdf, doc, docx, odt, rtf, txt, md]
+    - key: spreadsheets
+      label: Spreadsheets
+      members: [xls, xlsx, csv, ods]
+    - key: emails
+      label: Emails
+      members: [eml, msg]
+
+# ---------------------------------------------------------------------
+# Downloaders, keyed by the id's URL scheme. Only smb is implemented
+# (lib/downloaders/smb.js); remove the block to disable downloads.
+# ---------------------------------------------------------------------
+downloads:
+  smb:
+    # Same shares.yaml the crawler uses (Pelican's config/shares.yaml,
+    # mounted read-only), so SMB servers and credential env-var names live
+    # in one place. Set those env vars (SMB_USER / SMB_PASS / SMB_DOMAIN by
+    # default) on this container too.
+    shares_file: "${SHARES_CONFIG:-/app/shares.yaml}"
