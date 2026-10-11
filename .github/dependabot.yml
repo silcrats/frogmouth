@@ -1,0 +1,30 @@
+# Weekly dependency update PRs, grouped so each ecosystem opens at most one
+# PR per week. The publish workflow builds every PR (without pushing), so a
+# broken update shows up as a failed check before merge.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    # Stay on the current Node LTS line; bump the major by hand.
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
