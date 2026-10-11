@@ -33,6 +33,10 @@ for (const [scheme, opts] of Object.entries(config.downloads)) {
 // ---------------------------------------------------------------------
 // Session
 // ---------------------------------------------------------------------
+// Secure cookies are only issued on HTTPS requests; behind a reverse proxy
+// that terminates TLS, trust its X-Forwarded-Proto so they still are.
+if (config.session.secure_cookie) app.set('trust proxy', 1);
+
 app.use(session({
   secret: config.session.secret,
   resave: false,
@@ -40,7 +44,7 @@ app.use(session({
   cookie: {
     httpOnly: true,
     maxAge: 8 * 60 * 60 * 1000, // 8h -- re-login once per working day
-    // secure: true,             // enable once this sits behind HTTPS
+    secure: config.session.secure_cookie,
   }
 }));
 app.use(express.json());

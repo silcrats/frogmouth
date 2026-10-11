@@ -28,7 +28,12 @@ opensearch:
   index: "${SEARCH_INDEX:-documents}"
 
 session:
-  secret: "${SESSION_SECRET:-change-me-in-.env}"
+  # Required, at least 32 characters; the server refuses to start without
+  # it. Generate one with: openssl rand -hex 32
+  secret: "${SESSION_SECRET}"
+  # Mark the session cookie Secure (HTTPS only). Turn on when serving over
+  # HTTPS, including behind a TLS-terminating reverse proxy.
+  secure_cookie: "${SESSION_SECURE_COOKIE:-false}"
 
 # ---------------------------------------------------------------------
 # Authentication. Only "ldap" is implemented (lib/auth/ldap.js); a new
