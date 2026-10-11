@@ -1,0 +1,9 @@
+.git
+.github
+node_modules
+.env
+.env.*
+shares.yaml
+config.local
+branding
+docker-compose*.yml

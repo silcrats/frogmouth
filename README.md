@@ -37,6 +37,10 @@ docker compose -f docker-compose.example.yml up -d --build
 
 Then open <http://localhost:3000>.
 
+Prebuilt images (amd64 and arm64) are published to GitHub Container Registry.
+To use one instead of building, replace `build: .` in the compose file with
+`image: ghcr.io/silcrats/frogmouth:latest` (or pin a version such as `:0.1.0`).
+
 To run without Docker (Node 18+): `npm install`, set the variables from
 `.env.example` in your environment, then `npm start`.
 
