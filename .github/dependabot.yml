@@ -1,6 +1,7 @@
-# Weekly dependency update PRs, grouped so each ecosystem opens at most one
-# PR per week. The publish workflow builds every PR (without pushing), so a
-# broken update shows up as a failed check before merge.
+# Weekly dependency update PRs. Minor and patch updates are grouped into one
+# PR per ecosystem; each major update gets its own PR, since those can break
+# things a build alone won't catch. The publish workflow builds every PR
+# (without pushing), so a broken build shows up as a failed check.
 
 version: 2
 updates:
@@ -11,6 +12,7 @@ updates:
     groups:
       npm:
         patterns: ["*"]
+        update-types: [minor, patch]
 
   - package-ecosystem: docker
     directory: /
@@ -28,3 +30,4 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+        update-types: [minor, patch]
