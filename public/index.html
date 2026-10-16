@@ -1253,6 +1253,9 @@
       metaRow.innerHTML = data.numFound > 0
         ? `<span class="status-dot ok"></span>${data.numFound.toLocaleString()} result${data.numFound === 1 ? '' : 's'} — showing ${start + 1}–${rangeEnd}`
         : `<span class="status-dot ok"></span>0 results`;
+      if (data.partial) {
+        metaRow.innerHTML += ' — <span class="status-dot err"></span>some results could not be loaded';
+      }
 
       renderResults(data);
     } catch (err) {

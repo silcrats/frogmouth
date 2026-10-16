@@ -156,8 +156,22 @@ function toIsoDate(dateStr, endOfDay) {
 async function osSearch(body) {
   const res = await opensearch.request('POST', `/${encodeURIComponent(SEARCH_INDEX)}/_search`, body);
   if (!res.ok) throw new Error(`OpenSearch error ${res.status}: ${res.text}`);
-  return JSON.parse(res.text);
+  const data = JSON.parse(res.text);
+  // A shard that fails still leaves a 200 with the full hit count, just
+  // without that shard's documents -- log why, rather than lose them quietly.
+  const shards = data._shards || {};
+  if (shards.failed) {
+    const reasons = [...new Set((shards.failures || []).map(f => f.reason && f.reason.reason))].filter(Boolean);
+    console.warn(`OpenSearch: ${shards.failed} of ${shards.total} shard(s) failed:`, reasons.join('; ') || 'no reason given');
+  }
+  return data;
 }
+
+// Highlighting re-analyzes each hit's text, and OpenSearch fails a hit
+// whose text is longer than index.highlight.max_analyzed_offset (default
+// 1,000,000 characters) -- dropping it from the results. Highlight within
+// that many characters instead. Must not exceed the index's own setting.
+const HIGHLIGHT_MAX_CHARS = 1000000;
 
 function roleFilter(roles) {
   return { terms: { [ROLE_FIELD]: roles } };
@@ -267,12 +281,16 @@ app.get('/api/search', requireAuth, async (req, res) => {
       }
     },
     _source: RETURN_FIELDS,
-    highlight: {
+  };
+  // A blank q has nothing to highlight.
+  if (q) {
+    body.highlight = {
+      max_analyzer_offset: HIGHLIGHT_MAX_CHARS,
       fields: { [F.content]: { fragment_size: 200, number_of_fragments: 2 } },
       pre_tags: ['<mark>'],
       post_tags: ['</mark>'],
-    },
-  };
+    };
+  }
 
   try {
     const data = await osSearch(body);
@@ -283,7 +301,8 @@ app.get('/api/search', requireAuth, async (req, res) => {
         highlighting[docs[i].id] = { content: h.highlight[F.content] };
       }
     });
-    res.json({ numFound: data.hits.total.value, start, docs, highlighting });
+    const partial = Boolean(data._shards && data._shards.failed);
+    res.json({ numFound: data.hits.total.value, start, docs, highlighting, partial });
   } catch (err) {
     console.error('Search error:', err.message);
     res.status(502).json({ error: 'Search failed', detail: err.message });
