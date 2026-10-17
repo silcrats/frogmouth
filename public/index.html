@@ -324,6 +324,14 @@
     margin-top: 28px;
   }
 
+  .app-version {
+    margin-top: 40px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
   .pager button {
     background: var(--panel);
     color: var(--text);
@@ -610,6 +618,8 @@
       <button id="prevBtn">&larr; Previous</button>
       <button id="nextBtn">Next &rarr;</button>
     </div>
+
+    <footer class="app-version" id="appVersion"></footer>
   </div>
 
 <script>
@@ -648,6 +658,7 @@
       const res = await apiFetch('/api/whoami');
       const data = await res.json();
       document.getElementById('whoami').textContent = data.displayName || data.username;
+      if (data.version) document.getElementById('appVersion').textContent = `Frogmouth v${data.version}`;
     } catch (err) { /* redirect already in flight */ }
   })();
 

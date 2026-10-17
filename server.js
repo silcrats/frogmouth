@@ -8,6 +8,7 @@ const { createOpenSearchClient } = require('./lib/opensearch');
 
 const config = loadConfig();
 const app = express();
+const { version: VERSION } = require('./package.json');
 const PORT = process.env.PORT || 3000;
 
 const opensearch = createOpenSearchClient(config.opensearch);
@@ -109,7 +110,9 @@ app.post('/api/logout', (req, res) => {
 
 app.get('/api/whoami', (req, res) => {
   if (!req.session.user) return res.status(401).json({ error: 'Not logged in' });
-  res.json({ username: req.session.user.username, displayName: req.session.user.displayName || req.session.user.username });
+  // The version is shown only once signed in, so the sign-in page doesn't
+  // advertise it.
+  res.json({ username: req.session.user.username, displayName: req.session.user.displayName || req.session.user.username, version: VERSION });
 });
 
 // Branding, sources, filters and type groups for the browser. Public so
@@ -445,7 +448,7 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Frogmouth Search listening on port ${PORT}`);
+  console.log(`Frogmouth Search ${VERSION} listening on port ${PORT}`);
   console.log(`Config loaded from ${config.configPath}`);
   console.log(`OpenSearch at ${opensearch.describe()}, index ${SEARCH_INDEX}`);
   console.log(`Auth: ${auth.describe()}`);
