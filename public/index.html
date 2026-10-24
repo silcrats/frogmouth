@@ -568,6 +568,15 @@
       </div>
     </div>
 
+    <div class="logic-toggle" id="modeToggle" style="margin-bottom:10px; display:none;">
+      Mode:
+      <div class="switch">
+        <button type="button" data-mode="keyword" title="Documents containing the words searched for">Keyword</button>
+        <button type="button" data-mode="semantic" title="Documents closest in meaning, whether or not they use the same words">Semantic</button>
+        <button type="button" data-mode="hybrid" title="Both, ranked together">Hybrid</button>
+      </div>
+    </div>
+
     <button type="button" class="filter-toggle" id="filterToggle">
       &darr; Filters <span class="count" id="filterCount" style="display:none;"></span>
     </button>
@@ -718,6 +727,21 @@
     renderFilterRows();
     updateFilterCount();
     loadFacets();
+    if (hasSearched) runSearch(currentQuery, 0);
+  });
+
+  // Search mode: keyword unless the server offers vector search (cfg.search_modes).
+  const modeToggle = document.getElementById('modeToggle');
+  const modeSwitch = modeToggle.querySelector('.switch');
+  let searchMode = 'keyword';
+  function setSearchMode(mode) {
+    searchMode = mode;
+    modeSwitch.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  }
+  modeSwitch.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-mode]');
+    if (!btn || btn.dataset.mode === searchMode) return;
+    setSearchMode(btn.dataset.mode);
     if (hasSearched) runSearch(currentQuery, 0);
   });
 
@@ -969,6 +993,11 @@
     });
     // A single source has nothing to scope between.
     scopeToggle.style.display = (cfg.sources || []).length > 1 ? '' : 'none';
+
+    const modes = cfg.search_modes || ['keyword'];
+    modeSwitch.querySelectorAll('button').forEach(b => { b.style.display = modes.includes(b.dataset.mode) ? '' : 'none'; });
+    modeToggle.style.display = modes.length > 1 ? '' : 'none';
+    setSearchMode(cfg.default_mode || 'keyword');
 
     FIELD_LABELS = {};
     FILTER_PLACEHOLDERS = {};
@@ -1248,6 +1277,7 @@
       searchParams.set('q', q);
       searchParams.set('start', String(start));
       searchParams.set('rows', String(ROWS_PER_PAGE));
+      if (searchMode !== 'keyword') searchParams.set('mode', searchMode);
 
       const res = await apiFetch(`/api/search?${searchParams.toString()}`);
       const data = await res.json();

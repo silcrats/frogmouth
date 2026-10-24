@@ -1,7 +1,7 @@
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
-const { loadConfig, publicConfig } = require('./lib/config');
+const { loadConfig, publicConfig, SEARCH_MODES } = require('./lib/config');
 const { createLdapAuth } = require('./lib/auth/ldap');
 const { createSmbDownloader } = require('./lib/downloaders/smb');
 const { createOpenSearchClient } = require('./lib/opensearch');
@@ -253,6 +253,45 @@ function parseFilterParams(req) {
   return { filters, logic, dateFrom: toIsoDate(from, false), dateTo: toIsoDate(to, true) };
 }
 
+// Search modes (vector: in config.yaml). keyword is the full-text query;
+// semantic finds the documents with passages closest in meaning to q; hybrid
+// runs both and the index's search pipeline blends their scores.
+function searchMode(req, q) {
+  const mode = queryParam(req, 'mode') || 'keyword';
+  if (!SEARCH_MODES.includes(mode)) throw new BadRequest('Invalid mode parameter');
+  if (mode !== 'keyword' && !config.vector.enabled) throw new BadRequest('Vector search is not enabled');
+  // A blank q has no meaning to compare against: browse as keyword does.
+  return q ? mode : 'keyword';
+}
+
+function semanticQuery(text, filterBool) {
+  const { field, k } = config.vector;
+  return {
+    bool: {
+      must: [{
+        nested: {
+          path: field,
+          score_mode: 'max',
+          query: {
+            neural: {
+              [`${field}.knn`]: {
+                query_text: text,
+                k,
+                // Applied during the nearest-neighbour search, not after it:
+                // otherwise the closest passages could all belong to documents
+                // this user can't see, leaving too few results or none.
+                filter: { bool: { filter: filterBool } },
+              },
+            },
+          },
+        },
+      }],
+      // And on the matching documents themselves.
+      filter: filterBool,
+    },
+  };
+}
+
 app.get('/api/search', requireAuth, async (req, res) => {
   const qRaw = queryParam(req, 'q').trim();
   // "quoted" search: require the exact phrase, not just all/any of its
@@ -267,31 +306,35 @@ app.get('/api/search', requireAuth, async (req, res) => {
   // with none set it lists everything the signed-in user can see (still capped
   // by role + pagination) -- match_all in place of the text search below.
   const filterBool = buildFilterBool(filters, logic, dateFrom, dateTo, queryParam(req, 'scope'), req.session.user.roles);
+  const mode = searchMode(req, q);
+
+  const textMatch = q ? {
+    multi_match: {
+      query: q,
+      type: phraseSearch ? 'phrase' : 'best_fields',
+      fields: config.search_fields,
+    }
+  } : { match_all: {} };
+  const keyword = { bool: { must: [textMatch], filter: filterBool } };
+  const query = mode === 'semantic' ? semanticQuery(q, filterBool)
+    : mode === 'hybrid' ? { hybrid: { queries: [keyword, semanticQuery(q, filterBool)], pagination_depth: config.vector.k } }
+    : keyword;
 
   const body = {
     from: start,
     size: rows,
-    query: {
-      bool: {
-        must: [q ? {
-          multi_match: {
-            query: q,
-            type: phraseSearch ? 'phrase' : 'best_fields',
-            fields: config.search_fields,
-          }
-        } : { match_all: {} }],
-        filter: filterBool,
-      }
-    },
+    query,
     _source: RETURN_FIELDS,
   };
-  // A blank q has nothing to highlight.
+  // A blank q has nothing to highlight. Semantic matches needn't contain the
+  // words searched for, but highlight them where they do.
   if (q) {
     body.highlight = {
       max_analyzer_offset: HIGHLIGHT_MAX_CHARS,
       fields: { [F.content]: { fragment_size: 200, number_of_fragments: 2 } },
       pre_tags: ['<mark>'],
       post_tags: ['</mark>'],
+      ...(mode !== 'keyword' && { highlight_query: textMatch }),
     };
   }
 
@@ -305,7 +348,7 @@ app.get('/api/search', requireAuth, async (req, res) => {
       }
     });
     const partial = Boolean(data._shards && data._shards.failed);
-    res.json({ numFound: data.hits.total.value, start, docs, highlighting, partial });
+    res.json({ numFound: data.hits.total.value, start, docs, highlighting, partial, mode });
   } catch (err) {
     console.error('Search error:', err.message);
     res.status(502).json({ error: 'Search failed', detail: err.message });
