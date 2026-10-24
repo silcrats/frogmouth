@@ -17,6 +17,8 @@ so it can front any index that carries per-document roles.
   never lists), and applied as a filter on every query and every download.
 - Full-text search with highlighting and `"exact phrase"` queries, or browse
   by filters alone.
+- Optional semantic and hybrid search over an index with passage vectors
+  (Pelican's vector search), with the same access filtering. Off by default.
 - One-click scopes per source (e.g. files, mail, SharePoint), and filters for
   file type (with groups such as Images or Documents), source, sender,
   recipient, attachment name and date range, combined with AND or OR.
@@ -66,6 +68,7 @@ come from the environment.
 | `sources` | Scope buttons, and what each source's results do (download or link) |
 | `filters`, `types` | Filter list; file-type aliases and groups |
 | `downloads` | Downloaders by URL scheme (`smb`, using a `shares.yaml`) |
+| `vector` | Semantic and hybrid search (`VECTOR_ENABLED`), off by default. Needs Pelican's vector search; adds a Keyword / Semantic / Hybrid switch |
 
 To add a logo, mount a folder at `/app/public/branding` and set
 `app.logo: "/branding/logo.png"`.

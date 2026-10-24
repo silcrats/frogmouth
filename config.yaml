@@ -126,6 +126,23 @@ search_fields:
   - email_attachments^1.5
 
 # ---------------------------------------------------------------------
+# Vector (semantic) search. Off by default; needs an index built with
+# passage vectors and a default search pipeline that supplies the model
+# (Pelican: vector.enabled in its pelican.yaml). When on, a Mode switch
+# offers Keyword, Semantic (closest passages in meaning) and Hybrid (both,
+# scores blended). The OpenSearch account needs the ML predict permission
+# (Pelican's opensearch-users job grants it to pelican-reader).
+#   field         nested field holding one { knn: [...] } object per passage
+#   k             passages considered per shard; also caps semantic results
+#   default_mode  keyword, semantic or hybrid
+# ---------------------------------------------------------------------
+vector:
+  enabled: "${VECTOR_ENABLED:-false}"
+  field: content_embedding
+  k: 100
+  default_mode: hybrid
+
+# ---------------------------------------------------------------------
 # Sources -- one "Search in:" button each (plus "All"). host is the
 # value of fields.source that identifies the source's documents -- for
 # Pelican, the matching entry under sources: in Pelican's config/pelican.yaml.
