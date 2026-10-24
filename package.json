@@ -1,6 +1,6 @@
 {
   "name": "frogmouth-search",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Config-driven, LDAP-authenticated search UI for an OpenSearch index, with pluggable file downloads.",
   "license": "Apache-2.0",
   "main": "server.js",
