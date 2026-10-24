@@ -13,7 +13,8 @@ so it can front any index that carries per-document roles.
 ## Features
 
 - LDAP / Active Directory sign-in; roles built server-side from `memberOf`
-  and applied as a filter on every query and every download.
+  plus, on AD, the primary group (usually Domain Users, which `memberOf`
+  never lists), and applied as a filter on every query and every download.
 - Full-text search with highlighting and `"exact phrase"` queries, or browse
   by filters alone.
 - One-click scopes per source (e.g. files, mail, SharePoint), and filters for
