@@ -27,6 +27,10 @@ so it can front any index that carries per-document roles.
   characters), email headers, and image camera and location metadata.
 - Per-source result actions: download over SMB, or open the item (and its
   folder) by link.
+- Private collections: save results to named lists with descriptions, kept
+  on disk, and find more like them by keyword or, with vector search, by
+  meaning (using the description too). Shown on top of the results or
+  docked at the left or right of wide windows.
 
 ## Quick start
 
@@ -48,7 +52,7 @@ Prebuilt images (amd64 and arm64) are published to GitHub Container Registry.
 To use one instead of building, replace `build: .` in the compose file with
 `image: ghcr.io/silcrats/frogmouth:latest` (or pin a version such as `:0.1.0`).
 
-To run without Docker (Node 20+): `npm install`, set the variables from
+To run without Docker (Node 22.13+): `npm install`, set the variables from
 `.env.example` in your environment, then `npm start`.
 
 ## Configuration
@@ -70,6 +74,14 @@ come from the environment.
 | `filters`, `types` | Filter list; file-type aliases and groups |
 | `downloads` | Downloaders by URL scheme (`smb`, using a `shares.yaml`) |
 | `vector` | Semantic and hybrid search (`VECTOR_ENABLED`), off by default. Needs Pelican's vector search; adds a Keyword / Semantic / Hybrid switch |
+| `collections` | Where users' collections are stored: an SQLite file, `data/collections.db` by default (`/app/data` in the image; `COLLECTIONS_DB` to move it) |
+
+Collections live in that file, so keep it on a volume and back it up: the
+compose example mounts the `frogmouth-data` volume at `/app/data`. Without
+a volume they're lost whenever the container is recreated. Only document
+ids are stored; what a user sees of a collection is looked up again with
+their current permissions, so items they've lost access to drop out of
+view.
 
 To add a logo, mount a folder at `/app/public/branding` and set
 `app.logo: "/branding/logo.png"`.

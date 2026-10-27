@@ -24,6 +24,8 @@ services:
       - certs:/certs:ro
       # SMB server/share definitions for downloads; omit to disable them.
       - ./shares.yaml:/app/shares.yaml:ro
+      # Users' collections (an SQLite file). Back this volume up.
+      - frogmouth-data:/app/data
       # Optional: your own config.yaml, and a logo for app.logo.
       # - ./config.local/config.yaml:/app/config.yaml:ro
       # - ./branding:/app/public/branding:ro
@@ -44,3 +46,4 @@ volumes:
   certs:
     external: true
     name: pelican_certs
+  frogmouth-data:

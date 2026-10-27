@@ -5,6 +5,7 @@ const { loadConfig, publicConfig, SEARCH_MODES } = require('./lib/config');
 const { createLdapAuth } = require('./lib/auth/ldap');
 const { createSmbDownloader } = require('./lib/downloaders/smb');
 const { createOpenSearchClient } = require('./lib/opensearch');
+const { openCollections } = require('./lib/collections');
 
 const config = loadConfig();
 const app = express();
@@ -12,6 +13,7 @@ const { version: VERSION } = require('./package.json');
 const PORT = process.env.PORT || 3000;
 
 const opensearch = createOpenSearchClient(config.opensearch);
+const collections = openCollections(config.collections.db_path);
 const SEARCH_INDEX = config.opensearch.index;
 const F = config.fields;
 const ROLE_FIELD = config.security.role_field;
@@ -318,6 +320,31 @@ function highlightToHtml(fragment) {
     .replaceAll(HL_PRE, '<mark>').replaceAll(HL_POST, '</mark>');
 }
 
+// The preview for each result: matching snippets, or the start of the text
+// when nothing matches (a blank q, or a semantic match without the words
+// searched for). highlightQuery: what to highlight, if not the query itself.
+function previewHighlight(highlightQuery) {
+  return {
+    max_analyzer_offset: HIGHLIGHT_MAX_CHARS,
+    fields: { [F.content]: { fragment_size: 200, number_of_fragments: 2, no_match_size: PREVIEW_CHARS } },
+    pre_tags: [HL_PRE],
+    post_tags: [HL_POST],
+    ...(highlightQuery && { highlight_query: highlightQuery }),
+  };
+}
+
+// Hits -> the results page the browser renders (docs plus escaped previews).
+function resultPage(hits, start, numFound) {
+  const docs = hits.map(h => normalizeDoc(h._source));
+  const highlighting = {};
+  hits.forEach((h, i) => {
+    if (h.highlight && h.highlight[F.content]) {
+      highlighting[docs[i].id] = { content: h.highlight[F.content].map(highlightToHtml) };
+    }
+  });
+  return { numFound, start, docs, highlighting };
+}
+
 app.get('/api/search', requireAuth, async (req, res) => {
   const qRaw = queryParam(req, 'q').trim();
   // "quoted" search: require the exact phrase, not just all/any of its
@@ -351,28 +378,15 @@ app.get('/api/search', requireAuth, async (req, res) => {
     size: rows,
     query,
     _source: SEARCH_FIELDS,
-    // The preview: matching snippets, or the start of the text when nothing
-    // matches (a blank q, or a semantic match without the words searched for).
-    highlight: {
-      max_analyzer_offset: HIGHLIGHT_MAX_CHARS,
-      fields: { [F.content]: { fragment_size: 200, number_of_fragments: 2, no_match_size: PREVIEW_CHARS } },
-      pre_tags: [HL_PRE],
-      post_tags: [HL_POST],
-      ...(mode !== 'keyword' && { highlight_query: textMatch }),
-    },
+    // Semantic matches needn't contain the words searched for, but highlight
+    // them where they do.
+    highlight: previewHighlight(mode !== 'keyword' ? textMatch : undefined),
   };
 
   try {
     const data = await osSearch(body);
-    const docs = data.hits.hits.map(h => normalizeDoc(h._source));
-    const highlighting = {};
-    data.hits.hits.forEach((h, i) => {
-      if (h.highlight && h.highlight[F.content]) {
-        highlighting[docs[i].id] = { content: h.highlight[F.content].map(highlightToHtml) };
-      }
-    });
     const partial = Boolean(data._shards && data._shards.failed);
-    res.json({ numFound: data.hits.total.value, start, docs, highlighting, partial, mode });
+    res.json({ ...resultPage(data.hits.hits, start, data.hits.total.value), partial, mode });
   } catch (err) {
     console.error('Search error:', err.message);
     res.status(502).json({ error: 'Search failed', detail: err.message });
@@ -401,6 +415,243 @@ app.get('/api/document', requireAuth, async (req, res) => {
     res.status(502).json({ error: 'Could not load the document', detail: err.message });
   }
 });
+
+// ---------------------------------------------------------------------
+// Collections: each user's private lists of results (lib/collections.js),
+// and "more like these" searches seeded from them. Only document ids are
+// stored, so everything shown is looked up again with the viewer's roles:
+// an item they've lost access to drops out of view, and is never used as
+// an example either.
+// ---------------------------------------------------------------------
+const SIMILAR_SEEDS = 20;     // most recently added visible items used as examples
+const SIMILAR_PER_SEED = 50;  // semantic: nearest documents taken for each example
+const SIMILAR_MAX = 200;      // results a "more like these" search pages through
+// Text taken from each example for keyword "more like these".
+const MLT_TEXT_CHARS = 20000;
+// more_like_this takes plain field names, not search_fields' ^boosts.
+const MLT_FIELDS = config.search_fields.map(f => f.split('^')[0]);
+
+function collectionOwner(req) {
+  return String(req.session.user.username).toLowerCase();
+}
+
+function pageParams(req) {
+  const start = Math.max(0, parseInt(queryParam(req, 'start'), 10) || 0);
+  const rows = Math.min(100, Math.max(1, parseInt(queryParam(req, 'rows'), 10) || 10));
+  return { start, rows };
+}
+
+function docIdParam(value) {
+  if (typeof value !== 'string' || !value.trim() || value.length > 2048) throw new BadRequest('Invalid document id');
+  return value.trim();
+}
+
+// Hits for the documents among ids (F.id values) that this user can see now,
+// in the order given. Unknown and forbidden ids are left out alike.
+async function visibleHits(req, ids, { source = [F.id], preview = false } = {}) {
+  if (!ids.length) return [];
+  const data = await osSearch({
+    size: ids.length,
+    _source: source,
+    query: { bool: { filter: [{ terms: { [F.id]: ids } }, roleFilter(req.session.user.roles)] } },
+    ...(preview && { highlight: previewHighlight() }),
+  });
+  const byId = new Map(data.hits.hits.map(h => [h._source[F.id], h]));
+  return ids.map(id => byId.get(id)).filter(Boolean);
+}
+
+// A page of documents by id, in that order, with previews.
+async function pageOfIds(req, ids, start, rows, total) {
+  const hits = await visibleHits(req, ids.slice(start, start + rows), { source: SEARCH_FIELDS, preview: true });
+  return resultPage(hits, start, total);
+}
+
+app.get('/api/collections', requireAuth, (req, res) => {
+  const doc = queryParam(req, 'doc');
+  res.json({ collections: collections.list(collectionOwner(req), doc || undefined) });
+});
+
+app.post('/api/collections', requireAuth, (req, res) => {
+  const { name, description } = req.body || {};
+  res.status(201).json(collections.create(collectionOwner(req), name, description));
+});
+
+app.patch('/api/collections/:id', requireAuth, (req, res) => {
+  const { name, description } = req.body || {};
+  res.json(collections.update(collectionOwner(req), req.params.id, { name, description }));
+});
+
+app.delete('/api/collections/:id', requireAuth, (req, res) => {
+  collections.remove(collectionOwner(req), req.params.id);
+  res.json({ ok: true });
+});
+
+// The collection's documents the user can see, most recently added first.
+app.get('/api/collections/:id', requireAuth, async (req, res) => {
+  const owner = collectionOwner(req);
+  const { id, name, description } = collections.get(owner, req.params.id);
+  const ids = collections.items(owner, id);
+  const { start, rows } = pageParams(req);
+  try {
+    const visible = (await visibleHits(req, ids)).map(h => h._source[F.id]);
+    const page = await pageOfIds(req, visible, start, rows, visible.length);
+    res.json({ ...page, collection: { id, name, description }, hidden: ids.length - visible.length });
+  } catch (err) {
+    console.error('Collection error:', err.message);
+    res.status(502).json({ error: 'Could not load the collection', detail: err.message });
+  }
+});
+
+app.post('/api/collections/:id/items', requireAuth, async (req, res) => {
+  const owner = collectionOwner(req);
+  collections.get(owner, req.params.id);
+  const docId = docIdParam((req.body || {}).id);
+  // Only something the user can see now can be added.
+  if (!(await visibleHits(req, [docId])).length) return res.status(403).json({ error: 'Not permitted' });
+  collections.addItem(owner, req.params.id, docId);
+  res.status(201).json({ ok: true });
+});
+
+app.delete('/api/collections/:id/items', requireAuth, (req, res) => {
+  collections.removeItem(collectionOwner(req), req.params.id, docIdParam(queryParam(req, 'id')));
+  res.json({ ok: true });
+});
+
+// "More like these": documents like the collection's, excluding its own.
+//   keyword   more_like_this on the examples' distinctive terms
+//   semantic  each example's passage vectors averaged into one; the nearest
+//             documents to each, merged by reciprocal rank (needs vector search)
+// Both search only what the user can see, as every search does.
+app.get('/api/collections/:id/similar', requireAuth, async (req, res) => {
+  const owner = collectionOwner(req);
+  const { id, name, description } = collections.get(owner, req.params.id);
+  const mode = queryParam(req, 'mode') || 'keyword';
+  if (!['keyword', 'semantic'].includes(mode)) throw new BadRequest('Invalid mode parameter');
+  if (mode === 'semantic' && !config.vector.enabled) throw new BadRequest('Vector search is not enabled');
+  const { start, rows } = pageParams(req);
+  const ids = collections.items(owner, id);
+  const roles = roleFilter(req.session.user.roles);
+  const notInCollection = { terms: { [F.id]: ids } };
+
+  try {
+    // The examples: the most recently added items the user can see now.
+    const examples = (await visibleHits(req, ids)).slice(0, SIMILAR_SEEDS);
+    // Semantic also searches with the description, so it can run from that alone.
+    const useDescription = mode === 'semantic' && Boolean(description);
+    const meta = { collection: { id, name, description }, mode, examples: examples.length, description_used: useDescription };
+    if (!examples.length && !useDescription) return res.json({ ...resultPage([], start, 0), ...meta });
+
+    if (mode === 'keyword') {
+      const like = await exampleTexts(req, examples.map(h => h._source[F.id]));
+      if (!like.length) return res.json({ ...resultPage([], start, 0), ...meta });
+      const data = await osSearch({
+        from: start,
+        size: rows,
+        _source: SEARCH_FIELDS,
+        query: {
+          bool: {
+            must: [{
+              more_like_this: {
+                fields: MLT_FIELDS,
+                like,
+                max_query_terms: 50,
+              },
+            }],
+            filter: [roles],
+            must_not: [notInCollection],
+          },
+        },
+        highlight: previewHighlight(),
+      });
+      const total = Math.min(data.hits.total.value, SIMILAR_MAX);
+      return res.json({ ...resultPage(start < SIMILAR_MAX ? data.hits.hits : [], start, total), ...meta });
+    }
+
+    // Semantic: one averaged vector per example (examples without passages,
+    // e.g. no text, are skipped), searched in parallel and merged. Naming
+    // the vector leaf: a _source list with just the nested field returns
+    // each knn as a number on OpenSearch 3.x.
+    const field = config.vector.field;
+    const withVectors = await visibleHits(req, examples.map(h => h._source[F.id]), { source: [F.id, `${field}.knn`] });
+    const vectors = withVectors.map(h => meanVector((h._source[field] || []).map(p => p.knn))).filter(Boolean);
+    // The nearest documents to one query vector (knn) or text (neural, which
+    // OpenSearch embeds with the index's model), as a ranked list of ids.
+    const nearest = async (kind, query) => {
+      const data = await osSearch({
+        size: SIMILAR_PER_SEED,
+        _source: [F.id],
+        query: {
+          nested: {
+            path: field,
+            score_mode: 'max',
+            query: {
+              [kind]: {
+                [`${field}.knn`]: {
+                  ...query,
+                  k: SIMILAR_PER_SEED,
+                  // Inside the search, so the nearest are drawn only from
+                  // documents the user can see and that aren't examples.
+                  filter: { bool: { filter: [roles], must_not: [notInCollection] } },
+                },
+              },
+            },
+          },
+        },
+      });
+      return data.hits.hits.map(h => h._source[F.id]);
+    };
+    // The description counts as one more example: a plain statement of what
+    // the collection is about, which helps most when it holds few documents.
+    const lists = await Promise.all([
+      ...vectors.map(vector => nearest('knn', { vector })),
+      ...(useDescription ? [nearest('neural', { query_text: description })] : []),
+    ]);
+    const scores = new Map();
+    for (const list of lists) {
+      list.forEach((docId, rank) => scores.set(docId, (scores.get(docId) || 0) + 1 / (60 + rank)));
+    }
+    const ranked = [...scores.entries()].sort((a, b) => b[1] - a[1]).slice(0, SIMILAR_MAX).map(([docId]) => docId);
+    res.json({ ...(await pageOfIds(req, ranked, start, rows, ranked.length)), ...meta });
+  } catch (err) {
+    console.error('Similar search error:', err.message);
+    res.status(502).json({ error: 'Search failed', detail: err.message });
+  }
+});
+
+// more_like_this examples as text: each document's title and the start of
+// its text, cut down in OpenSearch so a huge file isn't sent here and back.
+// (Liking documents by id would need the multi-term-vectors permission,
+// which a read-only account like pelican-reader doesn't have.)
+async function exampleTexts(req, ids) {
+  const data = await osSearch({
+    size: ids.length,
+    _source: [F.title],
+    query: { bool: { filter: [{ terms: { [F.id]: ids } }, roleFilter(req.session.user.roles)] } },
+    script_fields: {
+      like_text: {
+        script: {
+          source: 'def c = params._source[params.field]; if (c == null) { return ""; } '
+            + 'String s = c instanceof List ? (c.isEmpty() ? "" : c[0].toString()) : c.toString(); '
+            + 'return s.length() > params.max ? s.substring(0, params.max) : s;',
+          params: { field: F.content, max: MLT_TEXT_CHARS },
+        },
+      },
+    },
+  });
+  return data.hits.hits
+    .map(h => [h._source[F.title], ((h.fields || {}).like_text || [])[0]].filter(Boolean).join('\n'))
+    .filter(Boolean);
+}
+
+// The normalised mean of a document's passage vectors, or null if it has none.
+function meanVector(passages) {
+  const valid = passages.filter(v => Array.isArray(v) && v.length);
+  if (!valid.length) return null;
+  const mean = new Array(valid[0].length).fill(0);
+  for (const v of valid) v.forEach((x, i) => { mean[i] += x; });
+  const norm = Math.hypot(...mean) || 1;
+  return mean.map(x => x / norm);
+}
 
 app.get('/api/facets', requireAuth, async (req, res) => {
   const { filters, logic, dateFrom, dateTo } = parseFilterParams(req);
@@ -542,5 +793,6 @@ app.listen(PORT, () => {
   console.log(`Config loaded from ${config.configPath}`);
   console.log(`OpenSearch at ${opensearch.describe()}, index ${SEARCH_INDEX}`);
   console.log(`Auth: ${auth.describe()}`);
+  console.log(`Collections: ${collections.describe()}`);
   for (const [scheme, d] of Object.entries(downloaders)) console.log(`Downloads (${scheme}): ${d.describe()}`);
 });
