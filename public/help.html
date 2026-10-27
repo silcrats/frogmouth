@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Search help</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1c1f25;
+    --border: #2a2e36;
+    --text: #e6e8eb;
+    --text-dim: #8b909c;
+    --accent: #5fb3a3;
+    --accent-dim: #3d7a70;
+    --mono: "JetBrains Mono", "SF Mono", Consolas, monospace;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .shell { max-width: 760px; margin: 0 auto; padding: 48px 20px 80px; }
+  .label {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  h1 { font-size: 28px; margin: 6px 0 8px; line-height: 1.25; }
+  h2 {
+    font-size: 19px; margin: 44px 0 10px; padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  h3 { font-size: 15.5px; margin: 24px 0 6px; }
+  p, li { color: var(--text); }
+  .lead { color: var(--text-dim); font-size: 16px; margin-bottom: 24px; }
+  a { color: var(--accent); }
+  ul, ol { padding-left: 22px; }
+  li { margin: 4px 0; }
+  .ui {
+    font-family: var(--mono); font-size: 12.5px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; white-space: nowrap;
+  }
+  code { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  .tip {
+    background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--accent-dim);
+    border-radius: 6px; padding: 10px 14px; margin: 14px 0; font-size: 14px;
+  }
+  .contents {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 18px; font-size: 14px;
+  }
+  .contents ol { margin: 4px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 10px 0; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-dim); font-weight: 600; font-size: 12.5px; }
+  .back { display: inline-block; margin-bottom: 20px; font-family: var(--mono); font-size: 12px; }
+  [data-needs="vector"][hidden], [data-needs="mail"][hidden] { display: none; }
+  @media (max-width: 600px) { h1 { font-size: 23px; } .shell { padding-top: 28px; } }
+</style>
+</head>
+<body>
+<div class="shell">
+  <a class="back" href="/">&larr; Back to search</a>
+  <div class="label" id="appTitle">Frogmouth Search</div>
+  <h1>Search help</h1>
+  <p class="lead">How to find documents, narrow down results, and keep what you find in collections.</p>
+
+  <nav class="contents" aria-label="Contents">
+    <ol>
+      <li><a href="#signing-in">Signing in</a></li>
+      <li><a href="#searching">Searching</a></li>
+      <li data-needs="vector"><a href="#modes">Keyword, semantic and hybrid search</a></li>
+      <li><a href="#results">Reading results</a></li>
+      <li><a href="#filters">Narrowing results with filters</a></li>
+      <li><a href="#collections">Collections</a></li>
+      <li><a href="#what-you-see">What you can see</a></li>
+      <li><a href="#troubleshooting">If something isn't working</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="signing-in">Signing in</h2>
+  <p>Sign in with your normal work username and password, the same ones you use to log in to Windows. Type just your username, without the domain.</p>
+  <p>You stay signed in for 8 hours. To sign out, use <span class="ui">Sign out</span> at the top right. If you're asked to sign in again partway through, your session has ended; sign in and carry on.</p>
+
+  <h2 id="searching">Searching</h2>
+  <p>Type some words and press <span class="ui">Enter</span> or <span class="ui">Search</span>.</p>
+  <ul>
+    <li><strong>Results don't need every word.</strong> Documents containing more of your words come first, and a match in the title or file name counts for more than one in the text.</li>
+    <li><strong>Exact phrases:</strong> put the words in double quotes, e.g. <code>"annual leave policy"</code>, to find only documents with those words together in that order.</li>
+    <li><strong>Browsing:</strong> leave the box empty and use filters (see below) to list everything that matches them, e.g. every spreadsheet from last March.</li>
+  </ul>
+  <h3>Choosing where to search</h3>
+  <p><span class="ui">Search in:</span> under the search box limits results to one source<span id="sourceList"></span>. <span class="ui">All</span> searches everything.</p>
+
+  <section data-needs="vector">
+    <h2 id="modes">Keyword, semantic and hybrid search</h2>
+    <p>The <span class="ui">Mode</span> switch under the search box changes how your words are matched:</p>
+    <table>
+      <tr><th>Mode</th><th>Finds</th><th>Best for</th></tr>
+      <tr><td><span class="ui">Keyword</span></td><td>Documents containing your words.</td><td>Names, reference and invoice numbers, file names, exact phrases.</td></tr>
+      <tr><td><span class="ui">Semantic</span></td><td>Documents closest in meaning to what you typed, even if they use different words.</td><td>Questions in plain language, e.g. <code>how do we handle a data breach</code>, or when you don't know the exact terms.</td></tr>
+      <tr><td><span class="ui">Hybrid</span></td><td>Both, ranked together.</td><td>Everyday searching: exact matches still rank well, and related documents turn up too.</td></tr>
+    </table>
+    <div class="tip">Semantic search looks for what your words <em>mean</em>, so it can't follow instructions like "not PDFs" or "from 2019". Type only the topic, and use <a href="#filters">filters</a> for file type, dates and the like.</div>
+    <p>In semantic mode every document is some distance from your search, so the number of results counts everything ranked, not just close matches. The order is what matters: the closest are at the top.</p>
+  </section>
+
+  <h2 id="results">Reading results</h2>
+  <p>Each result shows its title, source, file type and date, and a preview with your search words highlighted. If none of your words appear in the text, the preview shows its first few lines instead.</p>
+  <p>The date is when an email was sent, when a photo was taken, or otherwise when the file was last changed.</p>
+  <ul>
+    <li><span class="ui">Expand</span> shows the details (path, size, dates, and email or photo information where there is some) and the document's text, with your words highlighted. Very long documents show their first 1,000,000 characters; the rest is in the original.</li>
+    <li><span class="ui">Download</span> fetches the original file. For email and SharePoint, buttons such as <span class="ui">Open in Outlook</span> open the item itself<span data-needs="sharepoint">, and <span class="ui">Open folder</span> opens the folder it's in</span>.</li>
+    <li><span class="ui">+ Collection</span> saves the result to a collection (see <a href="#collections">Collections</a>).</li>
+  </ul>
+  <p>Use <span class="ui">Show</span> to choose 10, 25, 50 or 100 results per page, and <span class="ui">Previous</span> / <span class="ui">Next</span> at the bottom to move between pages.</p>
+
+  <h2 id="filters">Narrowing results with filters</h2>
+  <p>Click <span class="ui">Filters</span> under the search box, then <span class="ui">+ Add filter</span>. Each filter row has three parts:</p>
+  <ol>
+    <li><strong>What to filter on</strong><span id="filterList"></span>.</li>
+    <li><span class="ui">is</span> or <span class="ui">is not</span>. <span class="ui">is not</span> leaves out whatever matches, e.g. <em>File type is not pdf</em>.</li>
+    <li><strong>The value.</strong> File type and source are chosen from a list, which shows how many results each choice has. File type includes groups such as <em>Documents</em> or <em>Images</em> as well as single types. <span data-needs="mail">From, To, CC and Attachments match any part of the text you type, e.g. <code>smith</code> finds every address containing it.</span></li>
+  </ol>
+  <p>With two or more <span class="ui">is</span> filters, choose <span class="ui">ALL (AND)</span> to require every one, or <span class="ui">ANY (OR)</span> for results matching at least one. <span class="ui">is not</span> filters always apply either way.</p>
+  <div class="tip"><strong>Example:</strong> Word documents or spreadsheets, but never PDFs: add <em>File type is doc</em> and <em>File type is xls</em>, choose <span class="ui">ANY (OR)</span>, and add <em>File type is not pdf</em>.</div>
+  <p><strong>Date range</strong> limits results to dates on or after the first date and on or before the second; you can fill in just one. <span class="ui">Clear all filters</span> removes them all. The number next to <span class="ui">Filters</span> shows how many are active.</p>
+
+  <h2 id="collections">Collections</h2>
+  <p>A collection is your own list of documents, for example everything you've found for a project. Only you can see your collections.</p>
+  <h3>Saving results</h3>
+  <p>Click <span class="ui">+ Collection</span> on a result. A small menu lists your collections, with a tick next to each one that already holds that result: tick or untick to add or remove it. To start a new collection with this result in it, type a name at the bottom and click <span class="ui">Add</span>.</p>
+  <h3>Managing collections</h3>
+  <p><span class="ui">Collections</span> at the top of the page opens a panel listing your collections and how many documents each holds. From there you can:</p>
+  <ul>
+    <li>open a collection by clicking its name;</li>
+    <li>create one, with an optional description of what it's for;</li>
+    <li><span class="ui">Edit</span> a collection's name or description;</li>
+    <li><span class="ui">Delete</span> a collection (this only deletes the list, never the documents).</li>
+  </ul>
+  <p>On a wide screen you can keep the panel at the <span class="ui">Left</span> or <span class="ui">Right</span> of the window while you search, or at the <span class="ui">Top</span>. Your choice is remembered in this browser.</p>
+  <h3>Finding more like a collection</h3>
+  <p>Open a collection and choose a <span class="ui">More like these</span> option in the bar above its documents:</p>
+  <ul>
+    <li><span class="ui">keyword</span> finds documents that share the distinctive words of the documents in your collection.</li>
+    <li data-needs="vector"><span class="ui">semantic</span> finds documents about the same things, even when they're worded differently. It also uses the collection's description, so a good description helps, especially while a collection holds only a few documents. A collection with just a description, and no documents yet, works too.</li>
+  </ul>
+  <p>Both use the 20 documents you added most recently, and leave out documents already in the collection. Use <span class="ui">Items</span> to go back to the collection's own documents, and <span class="ui">Back to search</span> to return to your search.</p>
+  <div class="tip">A collection holds up to 1,000 documents, and you can have up to 100 collections.</div>
+
+  <h2 id="what-you-see">What you can see</h2>
+  <p>You only ever see documents you're allowed to open: the same people who can open a file, mailbox or site can find it here. That applies everywhere, including previews, collections and "more like these". If someone's access to a document is removed, it stops appearing for them, and drops out of their collections too (the collection says how many items are hidden).</p>
+  <p>New and changed documents, and changes to who can see them, aren't instant: the search index is updated on a schedule, usually every few hours.</p>
+
+  <h2 id="troubleshooting">If something isn't working</h2>
+  <table>
+    <tr><th>What you see</th><th>What to try</th></tr>
+    <tr><td>Nothing found</td><td>Use fewer or different words, remove filters, or check <span class="ui">Search in</span> is set to <span class="ui">All</span>. If you know a document exists, you may not have access to it, or it may be newer than the last index update.</td></tr>
+    <tr><td>"Some results could not be loaded"</td><td>Part of the search failed, so the list may be incomplete. Try again in a moment.</td></tr>
+    <tr><td>Asked to sign in again</td><td>Your session ended (after 8 hours, or when the service was restarted). Sign in again.</td></tr>
+    <tr><td>Download fails</td><td>The file may have been moved, deleted or had its permissions changed since it was indexed.</td></tr>
+  </table>
+  <p>For anything else, contact your IT team.</p>
+</div>
+<script>
+  // Fit the guide to this deployment: its name, sources and filters, and
+  // whether semantic search is on.
+  fetch('/api/config').then(r => r.json()).then(cfg => {
+    const app = cfg.app || {};
+    if (app.title) {
+      document.getElementById('appTitle').textContent = app.title;
+      document.title = `Search help · ${app.title}`;
+    }
+    const join = items => items.length < 2 ? items.join('')
+      : `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`;
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const sources = cfg.sources || [];
+    if (sources.length > 1) {
+      document.getElementById('sourceList').innerHTML =
+        `: ${join(sources.map(s => `<span class="ui">${esc(s.label || s.key)}</span>`))}`;
+    }
+    const filters = (cfg.filters || []).map(f => f.label || f.key);
+    if (filters.length) document.getElementById('filterList').textContent = `: ${join(filters)}`;
+
+    const has = {
+      vector: (cfg.search_modes || []).includes('semantic'),
+      mail: (cfg.filters || []).some(f => ['from', 'to', 'cc', 'attachments'].includes(f.key)),
+      sharepoint: sources.some(s => s.folder_link),
+    };
+    document.querySelectorAll('[data-needs]').forEach(el => { el.hidden = !has[el.dataset.needs]; });
+  }).catch(() => { /* the generic guide still applies */ });
+</script>
+</body>
+</html>

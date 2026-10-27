@@ -31,6 +31,9 @@ so it can front any index that carries per-document roles.
   on disk, and find more like them by keyword or, with vector search, by
   meaning (using the description too). Shown on top of the results or
   docked at the left or right of wide windows.
+- A user guide for people searching, at `/help`, linked from the search and
+  sign-in pages. It adapts to the configuration (sources, filters, whether
+  semantic search is on).
 
 ## Quick start
 
