@@ -175,6 +175,13 @@ async function osSearch(body) {
 // 1,000,000 characters) -- dropping it from the results. Highlight within
 // that many characters instead. Must not exceed the index's own setting.
 const HIGHLIGHT_MAX_CHARS = 1000000;
+// Search results carry a preview of each document, not its text, which can
+// run to millions of characters: the matching snippets, or failing that
+// this many characters from the start. The expanded view fetches the text
+// (/api/document), up to FULL_TEXT_MAX_CHARS.
+const PREVIEW_CHARS = 240;
+const FULL_TEXT_MAX_CHARS = 1000000;
+const SEARCH_FIELDS = RETURN_FIELDS.filter(f => f !== F.content);
 
 function roleFilter(roles) {
   return { terms: { [ROLE_FIELD]: roles } };
@@ -337,19 +344,17 @@ app.get('/api/search', requireAuth, async (req, res) => {
     from: start,
     size: rows,
     query,
-    _source: RETURN_FIELDS,
-  };
-  // A blank q has nothing to highlight. Semantic matches needn't contain the
-  // words searched for, but highlight them where they do.
-  if (q) {
-    body.highlight = {
+    _source: SEARCH_FIELDS,
+    // The preview: matching snippets, or the start of the text when nothing
+    // matches (a blank q, or a semantic match without the words searched for).
+    highlight: {
       max_analyzer_offset: HIGHLIGHT_MAX_CHARS,
-      fields: { [F.content]: { fragment_size: 200, number_of_fragments: 2 } },
+      fields: { [F.content]: { fragment_size: 200, number_of_fragments: 2, no_match_size: PREVIEW_CHARS } },
       pre_tags: [HL_PRE],
       post_tags: [HL_POST],
       ...(mode !== 'keyword' && { highlight_query: textMatch }),
-    };
-  }
+    },
+  };
 
   try {
     const data = await osSearch(body);
@@ -365,6 +370,29 @@ app.get('/api/search', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Search error:', err.message);
     res.status(502).json({ error: 'Search failed', detail: err.message });
+  }
+});
+
+// A result's text for the expanded view. Re-checked against the user's
+// roles like a download: an id could be guessed or pasted.
+app.get('/api/document', requireAuth, async (req, res) => {
+  const id = queryParam(req, 'id').trim();
+  if (!id) return res.status(400).json({ error: 'Missing id parameter' });
+  try {
+    const data = await osSearch({
+      size: 1,
+      _source: [F.content],
+      query: { bool: { must: [{ term: { [F.id]: id } }], filter: [roleFilter(req.session.user.roles)] } },
+    });
+    const hit = data.hits.hits[0];
+    // Missing and not permitted look the same, as for downloads.
+    if (!hit) return res.status(403).json({ error: 'Not permitted' });
+    const value = hit._source[F.content];
+    const text = String((Array.isArray(value) ? value[0] : value) || '');
+    res.json({ content: text.slice(0, FULL_TEXT_MAX_CHARS), length: text.length });
+  } catch (err) {
+    console.error('Document text error:', err.message);
+    res.status(502).json({ error: 'Could not load the document', detail: err.message });
   }
 });
 

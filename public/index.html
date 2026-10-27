@@ -1051,6 +1051,30 @@
   // Highlights every whole occurrence of each query term in the full
   // body text, so the expanded view gets the same visual cue as the
   // short server-generated snippet, without a second request.
+  // The expanded view's text, fetched on first expand rather than sent with
+  // every result. Resolves false if it couldn't be loaded.
+  async function loadFullText(id, el) {
+    try {
+      const res = await apiFetch(`/api/document?id=${encodeURIComponent(id)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      if (!data.content) {
+        el.innerHTML = '<em>No content available for this document.</em>';
+        return true;
+      }
+      el.innerHTML = highlightBody(data.content, currentQuery);
+      if (data.length > data.content.length) {
+        const note = document.createElement('p');
+        note.innerHTML = `<em>Showing the first ${data.content.length.toLocaleString()} of ${data.length.toLocaleString()} characters. The rest is in the original file.</em>`;
+        el.appendChild(note);
+      }
+      return true;
+    } catch (err) {
+      el.innerHTML = `<em>Couldn't load this document's text: ${escapeHtml(err.message)}</em>`;
+      return false;
+    }
+  }
+
   function highlightBody(text, query) {
     const escaped = escapeHtml(collapseBlankLines(text));
     const terms = (query || '')
@@ -1152,7 +1176,6 @@
       // keeps the shorter date-only fmtDate for created).
       const createdFull = fmtDateTime(doc.created);
       const modifiedFull = fmtDateTime(doc.modified);
-      const fullBody = firstOf(doc.content) || '';
       const sizeBytes = firstOf(doc.size);
       const sizeStr = sizeBytes ? `${(sizeBytes / 1024).toFixed(1)} KB` : null;
       const subject = firstOf(doc.email_subject);
@@ -1187,10 +1210,6 @@
         <div class="detail-label">${escapeHtml(label)}</div>
         <div class="detail-value">${escapeHtml(String(value))}</div>
       `).join('');
-
-      const bodyHtml = fullBody
-        ? highlightBody(fullBody, currentQuery)
-        : '<em>No content available for this document.</em>';
 
       // Built up rather than a single ternary: link sources with folder_link
       // get two buttons side by side (open the item itself, or its containing
@@ -1229,16 +1248,22 @@
         <div class="result-detail" style="display:none;">
           <div class="detail-grid">${detailGridHtml}</div>
           <div class="detail-body-label">Full content</div>
-          <div class="detail-body">${bodyHtml}</div>
+          <div class="detail-body"><em>Loading…</em></div>
         </div>
       `;
 
       const expandBtn = div.querySelector('.expand-btn');
       const expandLabel = div.querySelector('.expand-label');
-      expandBtn.addEventListener('click', () => {
+      let textRequested = false;
+      expandBtn.addEventListener('click', async () => {
         const isOpen = div.classList.toggle('open');
         div.querySelector('.result-detail').style.display = isOpen ? 'block' : 'none';
         expandLabel.textContent = isOpen ? 'Collapse' : 'Expand';
+        if (isOpen && !textRequested) {
+          textRequested = true;
+          // Allow another try on the next expand if this one fails.
+          textRequested = await loadFullText(doc.id, div.querySelector('.detail-body'));
+        }
       });
 
       resultsEl.appendChild(div);
