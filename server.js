@@ -767,6 +767,11 @@ app.get('/api/health', async (req, res) => {
 });
 
 // Serve the app shell -- login.html if not authenticated, index.html if so.
+// The user guide; readable before signing in.
+app.get('/help', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'help.html'));
+});
+
 app.get('/', (req, res) => {
   if (req.session && req.session.user) {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
