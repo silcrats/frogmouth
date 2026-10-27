@@ -190,31 +190,35 @@ function roleFilter(roles) {
 // Shared by /api/search and /api/facets, so a facet count is always computed
 // against exactly the filters/scope/dates/security a real search would use.
 function buildFilterBool(filters, logic, dateFrom, dateTo, scope, roles) {
-  const filterClauses = filters
-    .filter(f => f.value && Object.hasOwn(FIELD_MAP, f.field))
-    .map(f => {
-      const field = FIELD_MAP[f.field];
-      if (f.field === 'type') {
-        // A broad category (types.groups, e.g. "images") matches any of its
-        // members; a merged alias (types.aliases, jpg/jpeg) matches each of
-        // its values; otherwise it's a plain single value.
-        const values = Object.hasOwn(TYPE_GROUPS, f.value) ? TYPE_GROUPS[f.value]
-          : Object.hasOwn(TYPE_ALIASES, f.value) ? TYPE_ALIASES[f.value]
-          : [f.value];
-        return { terms: { [field]: values } };
-      }
-      if (f.field === 'share') {
-        return { term: { [field]: f.value } };
-      }
-      // Free-text filters: case-insensitive substring match. Wildcard
-      // queries need the exact-value .keyword sub-field, not the analyzed
-      // text field.
-      return { wildcard: { [`${field}.keyword`]: { value: `*${f.value}*`, case_insensitive: true } } };
-    });
+  const active = filters.filter(f => f.value && Object.hasOwn(FIELD_MAP, f.field));
+  const toClause = f => {
+    const field = FIELD_MAP[f.field];
+    if (f.field === 'type') {
+      // A broad category (types.groups, e.g. "images") matches any of its
+      // members; a merged alias (types.aliases, jpg/jpeg) matches each of
+      // its values; otherwise it's a plain single value.
+      const values = Object.hasOwn(TYPE_GROUPS, f.value) ? TYPE_GROUPS[f.value]
+        : Object.hasOwn(TYPE_ALIASES, f.value) ? TYPE_ALIASES[f.value]
+        : [f.value];
+      return { terms: { [field]: values } };
+    }
+    if (f.field === 'share') {
+      return { term: { [field]: f.value } };
+    }
+    // Free-text filters: case-insensitive substring match. Wildcard
+    // queries need the exact-value .keyword sub-field, not the analyzed
+    // text field.
+    return { wildcard: { [`${field}.keyword`]: { value: `*${f.value}*`, case_insensitive: true } } };
+  };
+  // "is" rows combine with ALL (AND) or ANY (OR); "is not" rows always
+  // apply, so "any of these, but never that" works with either.
+  const includes = active.filter(f => !f.not).map(toClause);
+  const excludes = active.filter(f => f.not).map(toClause);
 
-  const filterBool = filterClauses.length
-    ? [{ bool: logic === 'OR' ? { should: filterClauses, minimum_should_match: 1 } : { must: filterClauses } }]
+  const filterBool = includes.length
+    ? [{ bool: logic === 'OR' ? { should: includes, minimum_should_match: 1 } : { must: includes } }]
     : [];
+  if (excludes.length) filterBool.push({ bool: { must_not: excludes } });
 
   if (dateFrom || dateTo) {
     const range = {};
@@ -238,7 +242,8 @@ function buildFilterBool(filters, logic, dateFrom, dateTo, scope, roles) {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-// filters is a JSON array of { field, value } string pairs; dates are
+// filters is a JSON array of { field, value } string pairs, each with an
+// optional boolean `not` (exclude matches); dates are
 // YYYY-MM-DD. Anything else is a 400, not a malformed OpenSearch query.
 function parseFilterParams(req) {
   let filters;
@@ -248,7 +253,8 @@ function parseFilterParams(req) {
     throw new BadRequest('Invalid filters parameter');
   }
   if (!Array.isArray(filters) || !filters.every(f =>
-    f && typeof f === 'object' && typeof f.field === 'string' && typeof f.value === 'string')) {
+    f && typeof f === 'object' && typeof f.field === 'string' && typeof f.value === 'string'
+    && (f.not === undefined || typeof f.not === 'boolean'))) {
     throw new BadRequest('Invalid filters parameter');
   }
   const logic = queryParam(req, 'logic').toUpperCase() === 'OR' ? 'OR' : 'AND';
