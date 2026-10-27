@@ -541,6 +541,94 @@
 
   .status-dot.ok { background: var(--accent); }
   .status-dot.err { background: #c96a5a; }
+
+  /* Collections */
+  .header-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+    font-size: 11px; font-family: var(--mono); padding: 5px 10px; border-radius: 6px; cursor: pointer;
+  }
+  .header-btn:hover, .header-btn.active { color: var(--accent); border-color: var(--accent-dim); }
+  .collections-panel, .collection-banner {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; margin-bottom: 14px; font-size: 13px;
+  }
+  .collections-panel[hidden], .collection-banner[hidden] { display: none; }
+  .collection-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  .collection-row .collection-open {
+    flex: 1; text-align: left; background: none; border: none; color: var(--text);
+    font: inherit; cursor: pointer; padding: 4px 0;
+  }
+  .collection-row .collection-open:hover { color: var(--accent); }
+  .collection-row .count, .collect-menu .count { font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-left: 6px; }
+  .collection-row button:not(.collection-open), .collection-banner button, .collection-new button, .collect-menu button {
+    background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+    font-family: var(--mono); font-size: 11px; padding: 4px 9px; border-radius: 6px; cursor: pointer;
+  }
+  .collection-row button:hover, .collection-banner button:hover, .collection-banner button.active,
+  .collection-new button:hover, .collect-menu button:hover { color: var(--accent); border-color: var(--accent-dim); }
+  .collections-empty { color: var(--text-dim); padding: 4px 0 8px; }
+  .collection-new { display: flex; gap: 8px; margin-top: 10px; }
+  .collection-new input { flex: 1; min-width: 0; }
+  .collection-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .collection-banner .banner-title { flex: 1 1 auto; }
+  .collection-banner .banner-views { display: flex; flex-wrap: wrap; gap: 6px; }
+  .collect-wrap { position: relative; }
+  .collect-menu {
+    position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; width: 240px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); font-size: 13px;
+  }
+  .collect-menu label { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
+  .collect-menu .collection-new { margin-top: 8px; flex-wrap: wrap; }
+  .collections-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .collections-head .title {
+    flex: 1; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--text-dim);
+  }
+  .dock-switch { display: flex; gap: 4px; }
+  .collections-panel .dock-switch button, .collections-panel .panel-close { padding: 2px 7px; }
+  .dock-switch button.active { color: var(--accent); border-color: var(--accent-dim); }
+  .collection-row.current .collection-open { color: var(--accent); font-weight: 600; }
+  .collections-panel input[type="text"], .collect-menu input[type="text"], .collections-panel textarea {
+    font-size: 13px; padding: 7px 10px;
+  }
+  .collections-panel textarea {
+    width: 100%; box-sizing: border-box; min-height: 60px; resize: vertical;
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; font-family: var(--sans);
+  }
+  .collections-panel textarea:focus { outline: none; border-color: var(--accent-dim); }
+  .collection-item { padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .collection-item:last-child { border-bottom: none; }
+  .collection-desc {
+    color: var(--text-dim); font-size: 12px; margin: -2px 0 4px; white-space: pre-line;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .collection-edit { display: flex; flex-direction: column; gap: 6px; padding: 6px 0; }
+  .collection-edit .actions, .collection-confirm .actions { display: flex; gap: 6px; justify-content: flex-end; }
+  .collection-confirm { display: flex; flex-direction: column; gap: 6px; padding: 6px 0; font-size: 12.5px; }
+  .collections-panel button.danger:hover { color: #e0897a; border-color: #8a4a3f; }
+  .inline-error { flex: 1 1 100%; order: 9; color: #e0897a; font-size: 12px; padding-top: 4px; }
+  .collection-new.with-description { flex-wrap: wrap; }
+  .collection-new.with-description textarea { flex: 1 1 100%; order: 2; min-height: 44px; }
+  .collection-banner .banner-desc {
+    flex: 1 1 100%; order: 3; color: var(--text-dim); font-size: 12.5px; white-space: pre-line;
+  }
+  /* Left/Right: a full-height sidebar at that edge, with the results column
+     centred in the space left over. Narrower windows keep it on top. */
+  @media (min-width: 1100px) {
+    body.dock-left .collections-panel, body.dock-right .collections-panel {
+      position: fixed; top: 0; bottom: 0; width: 280px; margin: 0; z-index: 10;
+      overflow-y: auto; border-radius: 0; border-top: none; border-bottom: none; padding: 48px 16px 20px;
+    }
+    body.dock-left .collections-panel { left: 0; border-left: none; }
+    body.dock-right .collections-panel { right: 0; border-right: none; }
+    body.dock-left.collections-open { padding-left: 280px; }
+    body.dock-right.collections-open { padding-right: 280px; }
+  }
+  @media (max-width: 1099px) {
+    .dock-switch .dock-side { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -554,10 +642,29 @@
         </div>
         <div style="text-align:right; padding-top:4px;">
           <div id="whoami" style="font-family:var(--mono); font-size:12px; color:var(--text-dim); margin-bottom:6px;"></div>
+          <button type="button" id="collectionsBtn" class="header-btn">Collections</button>
           <button type="button" id="logoutBtn" style="background:transparent; border:1px solid var(--border); color:var(--text-dim); font-size:11px; font-family:var(--mono); padding:5px 10px; border-radius:6px; cursor:pointer;">Sign out</button>
         </div>
       </div>
     </header>
+
+    <div class="collections-panel" id="collectionsPanel" hidden>
+      <div class="collections-head">
+        <span class="title">Collections</span>
+        <div class="dock-switch" id="dockSwitch" title="Where the collections panel sits (left and right need a wider window)">
+          <button type="button" class="dock-side" data-dock="left">Left</button>
+          <button type="button" data-dock="top">Top</button>
+          <button type="button" class="dock-side" data-dock="right">Right</button>
+        </div>
+        <button type="button" class="panel-close" id="collectionsClose" title="Close">&times;</button>
+      </div>
+      <div id="collectionsList"></div>
+      <form class="collection-new with-description" id="newCollectionForm">
+        <input type="text" id="newCollectionName" placeholder="New collection name" maxlength="100" autocomplete="off">
+        <button type="submit">Create</button>
+        <textarea id="newCollectionDescription" placeholder="Description (optional)" maxlength="1000"></textarea>
+      </form>
+    </div>
 
     <form class="search-form" id="searchForm">
       <input type="text" id="queryInput" placeholder="Search…" autocomplete="off" autofocus>
@@ -607,6 +714,8 @@
       <button type="button" class="clear-filters" id="clearFilters">Clear all filters</button>
     </div>
 
+    <div class="collection-banner" id="collectionBanner" hidden></div>
+
     <div class="meta-row">
       <span id="metaRow"></span>
       <div class="page-size-control">
@@ -647,6 +756,10 @@
   const pageSizeSelect = document.getElementById('pageSizeSelect');
 
   let ROWS_PER_PAGE = parseInt(pageSizeSelect.value, 10) || 10;
+  // Reloads the view that's showing at a given offset (Previous/Next, page
+  // size): the search, or a collection (set by the collections code below).
+  let loadPage = start => runSearch(currentQuery, start);
+  let semanticAvailable = false;
   let currentQuery = '';
   let currentStart = 0;
   let currentTotal = 0;
@@ -1015,6 +1128,7 @@
     modeSwitch.querySelectorAll('button').forEach(b => { b.style.display = modes.includes(b.dataset.mode) ? '' : 'none'; });
     modeToggle.style.display = modes.length > 1 ? '' : 'none';
     setSearchMode(cfg.default_mode || 'keyword');
+    semanticAvailable = modes.includes('semantic');
 
     FIELD_LABELS = {};
     FILTER_PLACEHOLDERS = {};
@@ -1124,9 +1238,15 @@
     });
   }
 
-  function renderResults(data) {
+  // emptyHtml: what to show instead of the usual "nothing found" message.
+  function renderResults(data, emptyHtml) {
     resultsEl.innerHTML = '';
 
+    if ((!data.docs || data.docs.length === 0) && emptyHtml) {
+      resultsEl.innerHTML = emptyHtml;
+      pager.style.display = 'none';
+      return;
+    }
     if (!data.docs || data.docs.length === 0) {
       const emptyMsg = currentQuery
         ? `Nothing found for "${escapeHtml(currentQuery)}". Try a different term.`
@@ -1255,6 +1375,9 @@
           <div class="result-title">${escapeHtml(title)}</div>
           <div class="result-actions">
             ${actionButtonsHtml}
+            <div class="collect-wrap">
+              <button type="button" class="download-btn collect-btn" title="Add to or remove from your collections">+ Collection</button>
+            </div>
             <button type="button" class="expand-btn">
               <span class="expand-label">Expand</span><span class="expand-caret">&#9656;</span>
             </button>
@@ -1268,6 +1391,13 @@
           <div class="detail-body"><em>Loading…</em></div>
         </div>
       `;
+
+      div.querySelector('.collect-btn').addEventListener('click', e => {
+        e.stopPropagation();
+        const wrap = e.currentTarget.parentElement;
+        if (wrap.querySelector('.collect-menu')) closeCollectMenus();
+        else openCollectMenu(wrap, doc.id);
+      });
 
       const expandBtn = div.querySelector('.expand-btn');
       const expandLabel = div.querySelector('.expand-label');
@@ -1308,6 +1438,7 @@
   }
 
   async function runSearch(q, start = 0) {
+    leaveCollectionView();
     currentQuery = q;
     currentStart = start;
     hasSearched = true;
@@ -1359,19 +1490,341 @@
   });
 
   prevBtn.addEventListener('click', () => {
-    if (currentStart > 0) runSearch(currentQuery, Math.max(0, currentStart - ROWS_PER_PAGE));
+    if (currentStart > 0) loadPage(Math.max(0, currentStart - ROWS_PER_PAGE));
   });
 
   nextBtn.addEventListener('click', () => {
-    if (currentStart + ROWS_PER_PAGE < currentTotal) runSearch(currentQuery, currentStart + ROWS_PER_PAGE);
+    if (currentStart + ROWS_PER_PAGE < currentTotal) loadPage(currentStart + ROWS_PER_PAGE);
   });
 
   pageSizeSelect.addEventListener('change', () => {
     ROWS_PER_PAGE = parseInt(pageSizeSelect.value, 10) || 10;
     // Changing page size while sitting mid-list would produce a
     // confusing start offset, so jump back to the first page.
-    if (hasSearched) runSearch(currentQuery, 0);
+    if (hasSearched || openCollection) loadPage(0);
   });
+
+  // ------------------------------------------------------------------
+  // Collections: the user's private lists of results (/api/collections),
+  // shown in the results list, and "more like these" searches from them.
+  // ------------------------------------------------------------------
+  const collectionsBtn = document.getElementById('collectionsBtn');
+  const collectionsPanel = document.getElementById('collectionsPanel');
+  const collectionsList = document.getElementById('collectionsList');
+  const newCollectionForm = document.getElementById('newCollectionForm');
+  const newCollectionName = document.getElementById('newCollectionName');
+  const newCollectionDescription = document.getElementById('newCollectionDescription');
+  const collectionBanner = document.getElementById('collectionBanner');
+  let openCollection = null;    // { id, name } while a collection or its "more like these" is showing
+  let collectionView = null;    // 'items', 'semantic' or 'keyword'
+
+  async function collectionsApi(method, url, body) {
+    const res = await apiFetch(url, {
+      method,
+      ...(body && { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    return data;
+  }
+
+  // An error shown where it happened (a form, row or menu) rather than in a
+  // browser pop-up; replaces any earlier one there.
+  function showInlineError(where, message) {
+    let el = where.querySelector(':scope > .inline-error');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'inline-error';
+      el.setAttribute('role', 'alert');
+      where.appendChild(el);
+    }
+    el.textContent = message;
+  }
+  function clearInlineError(where) {
+    const el = where.querySelector(':scope > .inline-error');
+    if (el) el.remove();
+  }
+
+  async function refreshCollectionsPanel() {
+    let collections;
+    try {
+      ({ collections } = await collectionsApi('GET', '/api/collections'));
+    } catch (err) {
+      collectionsList.innerHTML = `<div class="collections-empty">Couldn't load your collections: ${escapeHtml(err.message)}</div>`;
+      return;
+    }
+    collectionsList.innerHTML = collections.length ? ''
+      : '<div class="collections-empty">No collections yet. Use "+ Collection" on a result, or create one here.</div>';
+    for (const c of collections) {
+      const item = document.createElement('div');
+      item.className = 'collection-item';
+      const row = document.createElement('div');
+      row.className = 'collection-row' + (openCollection && openCollection.id === c.id ? ' current' : '');
+      row.innerHTML = `<button type="button" class="collection-open">${escapeHtml(c.name)}<span class="count">${c.count}</span></button>
+        <button type="button" class="collection-edit-btn">Edit</button>
+        <button type="button" class="collection-delete">Delete</button>`;
+      item.appendChild(row);
+      if (c.description) {
+        const desc = document.createElement('div');
+        desc.className = 'collection-desc';
+        desc.textContent = c.description;
+        desc.title = c.description;
+        item.appendChild(desc);
+      }
+      row.querySelector('.collection-open').addEventListener('click', () => {
+        // On top it's in the way of the results; docked at the side it stays.
+        if (dock === 'top') toggleCollectionsPanel(false);
+        showCollection({ id: c.id, name: c.name, description: c.description }, 0);
+      });
+      row.querySelector('.collection-edit-btn').addEventListener('click', () => {
+        const form = document.createElement('form');
+        form.className = 'collection-edit';
+        form.innerHTML = `<input type="text" maxlength="100" autocomplete="off">
+          <textarea maxlength="1000" placeholder="Description (optional)"></textarea>
+          <div class="actions"><button type="button" class="cancel">Cancel</button><button type="submit">Save</button></div>`;
+        const [nameIn, descIn] = [form.querySelector('input'), form.querySelector('textarea')];
+        nameIn.value = c.name;
+        descIn.value = c.description || '';
+        form.querySelector('.cancel').addEventListener('click', () => refreshCollectionsPanel());
+        form.addEventListener('submit', async e => {
+          e.preventDefault();
+          try {
+            const saved = await collectionsApi('PATCH', `/api/collections/${c.id}`, { name: nameIn.value, description: descIn.value });
+            if (openCollection && openCollection.id === c.id) {
+              Object.assign(openCollection, { name: saved.name, description: saved.description });
+              renderBanner();
+            }
+            refreshCollectionsPanel();
+          } catch (err) { showInlineError(form, err.message); }
+        });
+        item.replaceChildren(form);
+        nameIn.focus();
+      });
+      row.querySelector('.collection-delete').addEventListener('click', () => {
+        const box = document.createElement('div');
+        box.className = 'collection-confirm';
+        box.innerHTML = `<div>Delete <strong>${escapeHtml(c.name)}</strong>? The documents themselves aren't affected.</div>
+          <div class="actions"><button type="button" class="cancel">Cancel</button><button type="button" class="danger">Delete</button></div>`;
+        // Cancel, Escape, or a click anywhere else puts the row back.
+        const restore = () => {
+          document.removeEventListener('mousedown', away, true);
+          refreshCollectionsPanel();
+        };
+        const away = e => {
+          if (!item.isConnected) document.removeEventListener('mousedown', away, true);
+          else if (!item.contains(e.target)) restore();
+        };
+        document.addEventListener('mousedown', away, true);
+        box.addEventListener('keydown', e => { if (e.key === 'Escape') restore(); });
+        box.querySelector('.cancel').addEventListener('click', restore);
+        box.querySelector('.danger').addEventListener('click', async () => {
+          try {
+            await collectionsApi('DELETE', `/api/collections/${c.id}`);
+            document.removeEventListener('mousedown', away, true);
+            if (openCollection && openCollection.id === c.id) backToSearch();
+            refreshCollectionsPanel();
+          } catch (err) { showInlineError(box, err.message); }
+        });
+        item.replaceChildren(box);
+        box.querySelector('.cancel').focus();
+      });
+      collectionsList.appendChild(item);
+    }
+  }
+
+  // Where the panel sits and whether it's open: this browser's preference,
+  // remembered between visits. Storage can be unavailable (private windows,
+  // blocked site data), in which case the defaults apply each time.
+  const DOCK_KEY = 'frogmouth.collectionsDock';
+  const OPEN_KEY = 'frogmouth.collectionsOpen';
+  function loadPref(key) { try { return localStorage.getItem(key); } catch { return null; } }
+  function savePref(key, value) { try { localStorage.setItem(key, value); } catch { /* not remembered */ } }
+
+  let dock = 'right';
+  function setDock(side) {
+    dock = ['left', 'top', 'right'].includes(side) ? side : 'right';
+    document.body.classList.remove('dock-left', 'dock-top', 'dock-right');
+    document.body.classList.add(`dock-${dock}`);
+    document.querySelectorAll('#dockSwitch [data-dock]').forEach(b => b.classList.toggle('active', b.dataset.dock === dock));
+    savePref(DOCK_KEY, dock);
+  }
+  document.getElementById('dockSwitch').addEventListener('click', e => {
+    const b = e.target.closest('[data-dock]');
+    if (b) setDock(b.dataset.dock);
+  });
+
+  function toggleCollectionsPanel(open) {
+    collectionsPanel.hidden = !open;
+    document.body.classList.toggle('collections-open', open);
+    collectionsBtn.classList.toggle('active', open);
+    savePref(OPEN_KEY, open ? '1' : '0');
+    if (open) refreshCollectionsPanel();
+  }
+  collectionsBtn.addEventListener('click', () => toggleCollectionsPanel(collectionsPanel.hidden));
+  document.getElementById('collectionsClose').addEventListener('click', () => toggleCollectionsPanel(false));
+  // Keep the open panel's counts and current collection up to date.
+  function refreshPanelIfOpen() { if (!collectionsPanel.hidden) refreshCollectionsPanel(); }
+
+  setDock(loadPref(DOCK_KEY));
+  if (loadPref(OPEN_KEY) === '1') toggleCollectionsPanel(true);
+
+  newCollectionForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const name = newCollectionName.value.trim();
+    if (!name) return;
+    try {
+      await collectionsApi('POST', '/api/collections', { name, description: newCollectionDescription.value });
+      newCollectionName.value = '';
+      newCollectionDescription.value = '';
+      clearInlineError(newCollectionForm);
+      refreshCollectionsPanel();
+    } catch (err) { showInlineError(newCollectionForm, err.message); }
+  });
+
+  // The "+ Collection" menu on a result: tick or untick each collection,
+  // or create one with this result in it.
+  function closeCollectMenus() {
+    document.querySelectorAll('.collect-menu').forEach(m => m.remove());
+  }
+  document.addEventListener('click', e => { if (!e.target.closest('.collect-wrap')) closeCollectMenus(); });
+
+  async function openCollectMenu(wrap, docId) {
+    closeCollectMenus();
+    const menu = document.createElement('div');
+    menu.className = 'collect-menu';
+    menu.innerHTML = '<em>Loading…</em>';
+    wrap.appendChild(menu);
+    // A view of this collection changes when its items do.
+    const changed = id => {
+      if (openCollection && openCollection.id === id) loadPage(currentStart);
+      refreshPanelIfOpen();
+    };
+
+    async function render() {
+      const { collections } = await collectionsApi('GET', `/api/collections?doc=${encodeURIComponent(docId)}`);
+      menu.innerHTML = collections.length ? '' : '<div class="collections-empty">No collections yet.</div>';
+      for (const c of collections) {
+        const label = document.createElement('label');
+        label.innerHTML = `<input type="checkbox" ${c.contains ? 'checked' : ''}> ${escapeHtml(c.name)}<span class="count">${c.count}</span>`;
+        const box = label.querySelector('input');
+        box.addEventListener('change', async () => {
+          try {
+            if (box.checked) await collectionsApi('POST', `/api/collections/${c.id}/items`, { id: docId });
+            else await collectionsApi('DELETE', `/api/collections/${c.id}/items?id=${encodeURIComponent(docId)}`);
+            clearInlineError(menu);
+            changed(c.id);
+          } catch (err) {
+            box.checked = !box.checked;
+            showInlineError(menu, err.message);
+          }
+        });
+        menu.appendChild(label);
+      }
+      const form = document.createElement('form');
+      form.className = 'collection-new';
+      form.innerHTML = '<input type="text" placeholder="New collection" maxlength="100" autocomplete="off"><button type="submit">Add</button>';
+      form.addEventListener('submit', async e => {
+        e.preventDefault();
+        const name = form.querySelector('input').value.trim();
+        if (!name) return;
+        try {
+          const created = await collectionsApi('POST', '/api/collections', { name });
+          await collectionsApi('POST', `/api/collections/${created.id}/items`, { id: docId });
+          await render();
+          refreshPanelIfOpen();
+        } catch (err) { showInlineError(form, err.message); }
+      });
+      menu.appendChild(form);
+    }
+    try { await render(); } catch (err) { menu.innerHTML = `<em>${escapeHtml(err.message)}</em>`; }
+  }
+
+  // A collection, or documents like it, in the results list.
+  function renderBanner() {
+    collectionBanner.hidden = false;
+    const views = [['items', 'Items'], ...(semanticAvailable ? [['semantic', 'More like these: semantic']] : []),
+                   ['keyword', 'More like these: keyword']];
+    collectionBanner.innerHTML = `<span class="banner-title">Collection: <strong>${escapeHtml(openCollection.name)}</strong></span>
+      <div class="banner-views">${views.map(([v, label]) =>
+        `<button type="button" data-view="${v}" class="${v === collectionView ? 'active' : ''}">${label}</button>`).join('')}</div>
+      <button type="button" class="banner-back">Back to search</button>
+      ${openCollection.description ? `<div class="banner-desc">${escapeHtml(openCollection.description)}</div>` : ''}`;
+    collectionBanner.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => {
+      if (b.dataset.view === 'items') showCollection(openCollection, 0);
+      else showSimilar(b.dataset.view, 0);
+    }));
+    collectionBanner.querySelector('.banner-back').addEventListener('click', backToSearch);
+  }
+
+  async function showView(url, start, describe, emptyHtml) {
+    currentStart = start;
+    metaRow.textContent = 'Loading…';
+    try {
+      const data = await collectionsApi('GET', `${url}${url.includes('?') ? '&' : '?'}start=${start}&rows=${ROWS_PER_PAGE}`);
+      currentTotal = data.numFound;
+      // Picks up a name or description changed elsewhere (another tab).
+      if (data.collection && openCollection && data.collection.id === openCollection.id
+          && (data.collection.name !== openCollection.name || data.collection.description !== openCollection.description)) {
+        Object.assign(openCollection, { name: data.collection.name, description: data.collection.description });
+        renderBanner();
+      }
+      const shown = data.numFound ? ` — showing ${start + 1}–${Math.min(start + ROWS_PER_PAGE, data.numFound)}` : '';
+      metaRow.innerHTML = `<span class="status-dot ok"></span>${describe(data)}${shown}`;
+      renderResults(data, emptyHtml);
+    } catch (err) {
+      metaRow.innerHTML = `<span class="status-dot err"></span>${escapeHtml(err.message)}`;
+      resultsEl.innerHTML = '';
+      pager.style.display = 'none';
+    }
+  }
+
+  function showCollection(c, start) {
+    const switched = !openCollection || openCollection.id !== c.id;
+    openCollection = c;
+    collectionView = 'items';
+    renderBanner();
+    if (switched) refreshPanelIfOpen();
+    loadPage = s => showCollection(openCollection, s);
+    return showView(`/api/collections/${c.id}`, start, data => {
+      const n = data.numFound;
+      return `${n.toLocaleString()} document${n === 1 ? '' : 's'}`
+        + (data.hidden ? ` (${data.hidden} more you can no longer see)` : '');
+    }, '<div class="empty-state"><div class="big">// empty collection</div>Add results to it with "+ Collection" on any result.</div>');
+  }
+
+  function showSimilar(mode, start) {
+    collectionView = mode;
+    renderBanner();
+    loadPage = s => showSimilar(mode, s);
+    return showView(`/api/collections/${openCollection.id}/similar?mode=${mode}`, start, data => {
+      const sources = [
+        ...(data.examples ? [`the ${data.examples} most recently added item${data.examples === 1 ? '' : 's'}`] : []),
+        ...(data.description_used ? ['the description'] : []),
+      ];
+      return `${data.numFound.toLocaleString()} document${data.numFound === 1 ? '' : 's'} like `
+        + `${sources.join(' and ') || 'nothing yet'} (${mode})`;
+    },
+    '<div class="empty-state"><div class="big">// nothing similar found</div>Add more documents to the collection, or try the other kind of search.</div>');
+  }
+
+  function leaveCollectionView() {
+    const was = openCollection;
+    openCollection = null;
+    collectionView = null;
+    collectionBanner.hidden = true;
+    loadPage = s => runSearch(currentQuery, s);
+    if (was) refreshPanelIfOpen();
+  }
+
+  function backToSearch() {
+    leaveCollectionView();
+    if (hasSearched) runSearch(currentQuery, 0);
+    else {
+      resultsEl.innerHTML = '<div class="empty-state"><div class="big">// ready</div>Enter a search term above to query the index.</div>';
+      metaRow.textContent = '';
+      pager.style.display = 'none';
+    }
+  }
 </script>
 </body>
 </html>

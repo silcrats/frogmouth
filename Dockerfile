@@ -17,6 +17,10 @@ ENV NODE_ENV=production
 ENV NODE_OPTIONS=--openssl-legacy-provider
 EXPOSE 3000
 
+# Collections database (config.yaml collections:). Created here so a new
+# volume mounted on it comes up owned by the node user.
+RUN mkdir -p /app/data && chown node:node /app/data
+
 USER node
 
 CMD ["node", "server.js"]
