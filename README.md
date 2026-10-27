@@ -21,7 +21,8 @@ so it can front any index that carries per-document roles.
   (Pelican's vector search), with the same access filtering. Off by default.
 - One-click scopes per source (e.g. files, mail, SharePoint), and filters for
   file type (with groups such as Images or Documents), source, sender,
-  recipient, attachment name and date range, combined with AND or OR.
+  recipient, attachment name and date range, combined with AND or OR. Any
+  filter can be set to "is not" to exclude its matches instead.
 - Expanded results with full text (loaded when expanded, up to 1,000,000
   characters), email headers, and image camera and location metadata.
 - Per-source result actions: download over SMB, or open the item (and its

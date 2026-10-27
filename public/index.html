@@ -378,6 +378,10 @@
     flex-shrink: 0;
   }
 
+  .filter-row select.not-select {
+    flex-shrink: 0;
+  }
+
   .filter-value {
     width: 100% !important;
     min-width: 0;
@@ -697,7 +701,7 @@
   let SOURCES_BY_HOST = {};     // doc.source value -> source config
   let typeOptions = [];     // populated from /api/facets
   let shareOptions = [];    // populated from /api/facets
-  let filterRows = [];      // [{ id, field, value }]
+  let filterRows = [];      // [{ id, field, value, not }]
   let filterLogic = 'AND';
   let rowIdCounter = 0;
 
@@ -764,7 +768,8 @@
     } else {
       filterCount.style.display = 'none';
     }
-    logicToggle.style.display = filterRows.length > 1 ? 'flex' : 'none';
+    // ALL/ANY only combines "is" rows; "is not" rows always apply.
+    logicToggle.style.display = filterRows.filter(r => !r.not).length > 1 ? 'flex' : 'none';
 
     // Two (or more) different Source filters can never both match the same
     // document under AND logic -- a file/mailbox/site only ever has one
@@ -773,7 +778,7 @@
     // that transition (crossing from fewer than 2 up to 2+) -- if the user
     // deliberately switches back to AND afterward, this won't immediately
     // override them again just because a later, unrelated filter changes.
-    const shareCount = filterRows.filter(r => r.field === 'share' && r.value.trim()).length;
+    const shareCount = filterRows.filter(r => r.field === 'share' && !r.not && r.value.trim()).length;
     if (prevShareFilterCount < 2 && shareCount >= 2 && filterLogic === 'AND') {
       filterLogic = 'OR';
       logicOrBtn.classList.add('active');
@@ -869,6 +874,17 @@
         if (hasSearched) runSearch(currentQuery, 0);
       });
 
+      const notSelect = document.createElement('select');
+      notSelect.className = 'not-select';
+      notSelect.title = '"is not" rows always apply, whether matching ALL or ANY';
+      notSelect.innerHTML = `<option value="">is</option><option value="not" ${row.not ? 'selected' : ''}>is not</option>`;
+      notSelect.addEventListener('change', () => {
+        row.not = notSelect.value === 'not';
+        updateFilterCount();
+        loadFacets();
+        if (hasSearched) runSearch(currentQuery, 0);
+      });
+
       const valueWrap = document.createElement('div');
       valueWrap.className = 'filter-value-wrap';
       valueWrap.appendChild(buildValueInput(row));
@@ -886,6 +902,7 @@
       });
 
       rowEl.appendChild(fieldSelect);
+      rowEl.appendChild(notSelect);
       rowEl.appendChild(valueWrap);
       rowEl.appendChild(removeBtn);
       filterRowsEl.appendChild(rowEl);
@@ -895,7 +912,7 @@
   addFilterRowBtn.addEventListener('click', () => {
     const firstField = Object.keys(FIELD_LABELS)[0];
     if (!firstField) return;
-    filterRows.push({ id: ++rowIdCounter, field: firstField, value: '' });
+    filterRows.push({ id: ++rowIdCounter, field: firstField, value: '', not: false });
     renderFilterRows();
     updateFilterCount();
   });
@@ -1281,7 +1298,7 @@
     const params = new URLSearchParams();
     const activeRows = filterRows.filter(r => r.value.trim());
     if (activeRows.length) {
-      params.set('filters', JSON.stringify(activeRows.map(r => ({ field: r.field, value: r.value.trim() }))));
+      params.set('filters', JSON.stringify(activeRows.map(r => ({ field: r.field, value: r.value.trim(), ...(r.not && { not: true }) }))));
       params.set('logic', filterLogic);
     }
     if (searchScope) params.set('scope', searchScope);
