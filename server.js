@@ -292,6 +292,19 @@ function semanticQuery(text, filterBool) {
   };
 }
 
+// Highlights mark matches with these rather than <mark>: a snippet is
+// document text, so it's HTML-escaped first and only then are the markers
+// turned into tags. Otherwise HTML in an indexed file or email would run in
+// the browser of whoever's results it appears in.
+const HL_PRE = '\uE000';
+const HL_POST = '\uE001';
+const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
+function highlightToHtml(fragment) {
+  return String(fragment).replace(/[&<>"']/g, c => HTML_ESCAPES[c])
+    .replaceAll(HL_PRE, '<mark>').replaceAll(HL_POST, '</mark>');
+}
+
 app.get('/api/search', requireAuth, async (req, res) => {
   const qRaw = queryParam(req, 'q').trim();
   // "quoted" search: require the exact phrase, not just all/any of its
@@ -332,8 +345,8 @@ app.get('/api/search', requireAuth, async (req, res) => {
     body.highlight = {
       max_analyzer_offset: HIGHLIGHT_MAX_CHARS,
       fields: { [F.content]: { fragment_size: 200, number_of_fragments: 2 } },
-      pre_tags: ['<mark>'],
-      post_tags: ['</mark>'],
+      pre_tags: [HL_PRE],
+      post_tags: [HL_POST],
       ...(mode !== 'keyword' && { highlight_query: textMatch }),
     };
   }
@@ -344,7 +357,7 @@ app.get('/api/search', requireAuth, async (req, res) => {
     const highlighting = {};
     data.hits.hits.forEach((h, i) => {
       if (h.highlight && h.highlight[F.content]) {
-        highlighting[docs[i].id] = { content: h.highlight[F.content] };
+        highlighting[docs[i].id] = { content: h.highlight[F.content].map(highlightToHtml) };
       }
     });
     const partial = Boolean(data._shards && data._shards.failed);

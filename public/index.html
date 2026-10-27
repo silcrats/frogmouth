@@ -1137,7 +1137,7 @@
 
       const hl = (data.highlighting && data.highlighting[doc.id] && data.highlighting[doc.id].content)
         ? data.highlighting[doc.id].content.join(' … ')
-        : (firstOf(doc.content) || '').slice(0, 240);
+        : escapeHtml((firstOf(doc.content) || '').slice(0, 240));
 
       const metaParts = [];
       if (share) metaParts.push(`<span>${escapeHtml(share)}</span>`);
