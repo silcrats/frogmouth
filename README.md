@@ -55,8 +55,9 @@ Prebuilt images (amd64 and arm64) are published to GitHub Container Registry.
 To use one instead of building, replace `build: .` in the compose file with
 `image: ghcr.io/silcrats/frogmouth:latest` (or pin a version such as `:0.1.0`).
 
-To run without Docker (Node 22.13+): `npm install`, set the variables from
-`.env.example` in your environment, then `npm start`.
+To run without Docker (Node 22.13+, and Samba's `smbget` 4.15+ for SMB
+downloads): `npm install`, set the variables from `.env.example` in your
+environment, then `npm start`.
 
 ## Configuration
 
@@ -96,6 +97,11 @@ The server and share must appear in `shares.yaml` (Pelican's format), which
 also names the environment variables holding credentials; set those on the
 Frogmouth container. Before serving a file, Frogmouth re-checks that the
 signed-in user can see that document.
+
+A file uses the entry for its server and share with the deepest `path`
+containing it. Files are fetched with Samba's `smbget` (in the image), which
+signs in with NTLMv2 over SMB 2/3. Traffic is signed, and encrypted for an
+entry with `encrypt: true`. A password can't start with a space.
 
 ### Security notes
 

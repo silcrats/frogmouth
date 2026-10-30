@@ -1,5 +1,8 @@
 FROM node:22-alpine
 
+# smbget, for SMB downloads.
+RUN apk add --no-cache samba-client
+
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -12,9 +15,6 @@ COPY public ./public
 ENV PORT=3000
 # Also stops Express putting stack traces in error responses.
 ENV NODE_ENV=production
-# @marsaud/smb2 needs MD4 for NTLM auth, which Node's OpenSSL 3
-# disables by default -- without this, any SMB download crashes the process.
-ENV NODE_OPTIONS=--openssl-legacy-provider
 EXPOSE 3000
 
 # Collections database (config.yaml collections:). Created here so a new
