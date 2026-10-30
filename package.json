@@ -13,8 +13,7 @@
   "dependencies": {
     "express": "^5.3.0",
     "express-session": "^1.18.0",
-    "ldapjs": "^3.0.7",
     "js-yaml": "^5.5.0",
-    "@marsaud/smb2": "^0.18.0"
+    "ldapjs": "^3.0.7"
   }
 }
