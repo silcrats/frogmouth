@@ -147,7 +147,7 @@ vector:
   # for the board's "similar meaning" suggestions.
   chunk_field: content_chunks
   k: 100
-  default_mode: hybrid
+  default_mode: keyword
 
 # ---------------------------------------------------------------------
 # Collections: each user's private lists of results, and "more like

@@ -118,7 +118,7 @@
     <li><span class="ui">Download</span> fetches the original file. For email and SharePoint, buttons such as <span class="ui">Open in Outlook</span> open the item itself<span data-needs="sharepoint">, and <span class="ui">Open folder</span> opens the folder it's in</span>.</li>
     <li><span class="ui">+ Collection</span> saves the result to a collection (see <a href="#collections">Collections</a>).</li>
   </ul>
-  <p>Use <span class="ui">Show</span> to choose 10, 25, 50 or 100 results per page, and <span class="ui">Previous</span> / <span class="ui">Next</span> at the bottom to move between pages.</p>
+  <p>Use <span class="ui">Show</span> to choose from 10 to 1,000 results per page (larger pages take longer to load), and <span class="ui">Previous page</span> / <span class="ui">Next page</span> at the bottom to move between pages.</p>
 
   <h2 id="filters">Narrowing results with filters</h2>
   <p>Click <span class="ui">Filters</span> under the search box, then <span class="ui">+ Add filter</span>. Each filter row has three parts:</p>
@@ -129,7 +129,7 @@
   </ol>
   <p>With two or more <span class="ui">is</span> filters, choose <span class="ui">ALL (AND)</span> to require every one, or <span class="ui">ANY (OR)</span> for results matching at least one. <span class="ui">is not</span> filters always apply either way.</p>
   <div class="tip"><strong>Example:</strong> Word documents or spreadsheets, but never PDFs: add <em>File type is doc</em> and <em>File type is xls</em>, choose <span class="ui">ANY (OR)</span>, and add <em>File type is not pdf</em>.</div>
-  <p><strong>Date range</strong> limits results to dates on or after the first date and on or before the second; you can fill in just one. <span class="ui">Clear all filters</span> removes them all. The number next to <span class="ui">Filters</span> shows how many are active.</p>
+  <p><strong>Date range</strong> is one of the filters: choose it, then fill in a day, month and year for either end or both. <span class="ui">is</span> keeps results dated within the range, and <span class="ui">is not</span> leaves those out, so results with no date stay in. You can add several, for example to leave out two different periods. <span class="ui">Clear all filters</span> removes them all. The number next to <span class="ui">Filters</span> shows how many are active.</p>
 
   <h2 id="collections">Collections</h2>
   <p>A collection is your own list of documents, for example everything you've found for a project. Only you can see your collections.</p>
@@ -149,6 +149,9 @@
     <li><span class="ui">Delete</span> a collection (this only deletes the list, never the documents).</li>
   </ul>
   <p>On a wide screen you can keep the panel at the <span class="ui">Left</span> or <span class="ui">Right</span> of the window while you search, or at the <span class="ui">Top</span>. Your choice is remembered in this browser.</p>
+  <h3>Searching inside a collection</h3>
+  <p>While a collection is open, the search box and filters look only inside it, with the box showing which one. Searches there start as <span class="ui">Keyword</span>, because semantic and hybrid searches find the closest documents rather than exact matches, so they include nearly everything and mostly change the order. <span class="ui">Items</span> lists the matches, best first, and <span class="ui">Timeline</span> narrows the chart and cards to them, oldest first. <span class="ui">Add all results</span> in <span class="ui">Items</span> adds the matches to another collection. <span class="ui">Board</span> always shows the whole board, and <span class="ui">Download all</span> the whole collection.</p>
+  <p><span class="ui">Search everything</span> runs what you've typed across all documents instead. <span class="ui">Back to search</span> returns to your main search and filters, just as you left them.</p>
   <h3>Seeing a collection on a timeline</h3>
   <p>Open a collection and choose <span class="ui">Timeline</span> in the bar above its documents. A chart shows when its documents are dated, and the list below runs oldest first. Choose how the chart looks; your choice is remembered in this browser:</p>
   <ul>
@@ -157,6 +160,8 @@
   </ul>
   <p>Click a square or bar, or drag across several, to zoom in: the chart and the list then cover just that period, in finer detail where possible. On a phone, tap to zoom; swiping scrolls. Stretches with no documents don't zoom. In the squares chart you can also click a decade or year at the left of a row, or a month name above a year of days, to open just that period.</p>
   <p>While you're looking at one whole day, month, year or decade, buttons named after the periods either side of it, such as <span class="ui">&larr; 1997</span> and <span class="ui">2001 &rarr;</span>, move you along. They skip periods with no documents. <span class="ui">Back</span> returns to the view you zoomed in from, and <span class="ui">Reset View</span> returns to the whole timeline.</p>
+  <p>Choose <span class="ui">Vertical</span> or <span class="ui">Horizontal</span> for which way the cards run. Horizontal is a row under the chart, so both stay in view. To move along it, hold the middle mouse button and drag: a faster drag goes further, and the row coasts on after you let go. You can also use its scrollbar, click a card, or use the large arrows at each end of the row or the left and right arrow keys. The scroll wheel scrolls the page as usual. <span class="ui">Previous page</span> and <span class="ui">Next page</span> show the next batch of documents. <span class="ui">Expand cards</span> opens every card, and loads each one's text as you reach it. Your choices are remembered in this browser.</p>
+  <p>A yellow diamond marks the date of the card in focus on the chart, and the card has a yellow outline. In focus means nearest the middle of the row or of the window, or the card you've tabbed to. In the vertical layout, the chart stays at the top of the window as you scroll, if there's room. A document with no date has no place on the chart, so the line under it says so. To jump through time, hold the middle mouse button on the diamond and drag it along the chart. The cards follow as you go, and if a date is on another page, that page opens when you let go. The chart's dates are in UTC, while cards show your local time, so the two can differ by a day.</p>
   <p>Each document's date is labelled <em>Sent</em>, <em>Taken</em> or <em>Modified</em> to show what it means. A modified date can be later than when a document was really written, and documents with no usable date are listed last.</p>
   <h3>Working on a board</h3>
   <p>Open a collection and choose <span class="ui">Board</span> in the bar above its documents. A board is a large canvas for laying out a collection's documents and how they relate, like an evidence board. Each collection has one, and it saves itself as you work.</p>
@@ -229,7 +234,7 @@
       document.getElementById('sourceList').innerHTML =
         `: ${join(sources.map(s => `<span class="ui">${esc(s.label || s.key)}</span>`))}`;
     }
-    const filters = (cfg.filters || []).map(f => f.label || f.key);
+    const filters = [...(cfg.filters || []).map(f => f.label || f.key), 'Date range'];
     if (filters.length) document.getElementById('filterList').textContent = `: ${join(filters)}`;
 
     const has = {
