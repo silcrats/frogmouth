@@ -68,7 +68,7 @@
   <a class="back" href="/">&larr; Back to search</a>
   <div class="label" id="appTitle">Frogmouth Search</div>
   <h1>Search help</h1>
-  <p class="lead">How to find documents, narrow down results, and keep what you find in collections.</p>
+  <p class="lead">How to find documents, narrow down results, keep what you find in collections, see them on a timeline and download them.</p>
 
   <nav class="contents" aria-label="Contents">
     <ol>
@@ -135,6 +135,11 @@
   <p>A collection is your own list of documents, for example everything you've found for a project. Only you can see your collections.</p>
   <h3>Saving results</h3>
   <p>Click <span class="ui">+ Collection</span> on a result. A small menu lists your collections, with a tick next to each one that already holds that result: tick or untick to add or remove it. To start a new collection with this result in it, type a name at the bottom and click <span class="ui">Add</span>.</p>
+  <h3>Saving several results at once</h3>
+  <p>Tick the box beside a result's title to select it. To select a run of results, tick the first, then hold <span class="ui">Shift</span> and tick the last. <span class="ui">Select page</span> ticks every result on the page. Your selection carries over as you move between pages and run other searches, and the bar above the results shows how many are selected.</p>
+  <p>Choose <span class="ui">Add selected to collection</span>, then pick a collection or type a name for a new one.</p>
+  <p>To save everything a search found, choose <span class="ui">Add all results</span> instead. It doesn't need anything selected, and it uses your current search and filters. If there are more results than a collection can hold, the best matches go in first.</p>
+  <p>The message afterwards says how many were added, and <span class="ui">Undo</span> takes back that addition.</p>
   <h3>Managing collections</h3>
   <p><span class="ui">Collections</span> at the top of the page opens a panel listing your collections and how many documents each holds. From there you can:</p>
   <ul>
@@ -144,6 +149,18 @@
     <li><span class="ui">Delete</span> a collection (this only deletes the list, never the documents).</li>
   </ul>
   <p>On a wide screen you can keep the panel at the <span class="ui">Left</span> or <span class="ui">Right</span> of the window while you search, or at the <span class="ui">Top</span>. Your choice is remembered in this browser.</p>
+  <h3>Seeing a collection on a timeline</h3>
+  <p>Open a collection and choose <span class="ui">Timeline</span> in the bar above its documents. A chart shows when its documents are dated, and the list below runs oldest first. Choose how the chart looks; your choice is remembered in this browser:</p>
+  <ul>
+    <li><span class="ui">Squares</span> gives each period a square, with darker to brighter shades for more documents, and the legend shows the scale. Up to a year, it's one square per day, with a hexagon on the last day of each month to show where months end. Longer spans get a row per year with a square per month, or a row per decade with a square per year. Shades compare periods within the chart you're looking at, so hover over a square for its exact count.</li>
+    <li><span class="ui">Bars</span> gives each day, month, year or decade a bar, which makes amounts easier to compare.</li>
+  </ul>
+  <p>Click a square or bar, or drag across several, to zoom in: the chart and the list then cover just that period, in finer detail where possible. On a phone, tap to zoom; swiping scrolls. Stretches with no documents don't zoom. In the squares chart you can also click a decade or year at the left of a row, or a month name above a year of days, to open just that period.</p>
+  <p>While you're looking at one whole day, month, year or decade, buttons named after the periods either side of it, such as <span class="ui">&larr; 1997</span> and <span class="ui">2001 &rarr;</span>, move you along. They skip periods with no documents. <span class="ui">Back</span> returns to the view you zoomed in from, and <span class="ui">Reset View</span> returns to the whole timeline.</p>
+  <p>Each document's date is labelled <em>Sent</em>, <em>Taken</em> or <em>Modified</em> to show what it means. A modified date can be later than when a document was really written, and documents with no usable date are listed last.</p>
+  <h3>Downloading a whole collection</h3>
+  <p>Open a collection and choose <span class="ui">Download all</span> in the bar above its documents. You get one zip file, with the documents you can open now under their own file names; files with the same name are numbered. Where a file can't be included, because it couldn't be read or the download reached its size limit, a file called <code>_not-included.txt</code> in the zip lists it. <span data-needs="sharepoint">Email and SharePoint items aren't files, so that list gives links to them instead.</span></p>
+  <p>Large collections take a while, and your browser can't show how far along the download is. You can run one at a time.</p>
   <h3>Finding more like a collection</h3>
   <p>Open a collection and choose a <span class="ui">More like these</span> option in the bar above its documents:</p>
   <ul>
@@ -154,7 +171,7 @@
   <div class="tip">A collection holds up to 1,000 documents, and you can have up to 100 collections.</div>
 
   <h2 id="what-you-see">What you can see</h2>
-  <p>You only ever see documents you're allowed to open: the same people who can open a file, mailbox or site can find it here. That applies everywhere, including previews, collections and "more like these". If someone's access to a document is removed, it stops appearing for them, and drops out of their collections too (the collection says how many items are hidden).</p>
+  <p>You only ever see documents you're allowed to open: the same people who can open a file, mailbox or site can find it here. That applies everywhere, including previews, collections, downloads and "more like these". If someone's access to a document is removed, it stops appearing for them, and drops out of their collections too (the collection says how many items are hidden).</p>
   <p>New and changed documents, and changes to who can see them, aren't instant: the search index is updated on a schedule, usually every few hours.</p>
 
   <h2 id="troubleshooting">If something isn't working</h2>
@@ -164,6 +181,10 @@
     <tr><td>"Some results could not be loaded"</td><td>Part of the search failed, so the list may be incomplete. Try again in a moment.</td></tr>
     <tr><td>Asked to sign in again</td><td>Your session ended (after 8 hours, or when the service was restarted). Sign in again.</td></tr>
     <tr><td>Download fails</td><td>The file may have been moved, deleted or had its permissions changed since it was indexed.</td></tr>
+    <tr><td><span class="ui">Download all</span> says the collection is over the limit</td><td>One download has a size limit, and the message gives it. Split the documents into smaller collections, or download the largest ones on their own.</td></tr>
+    <tr><td><span class="ui">Download all</span> says a download is already running</td><td>Wait for your other download to finish, or cancel it in your browser, then try again. If the message says too many are running, try again shortly.</td></tr>
+    <tr><td>Files are missing from a zip</td><td>Open <code>_not-included.txt</code> in the zip to see which ones and why. Documents you can no longer open are left out without being listed.</td></tr>
+    <tr><td>A zip download stops partway, or the zip won't open</td><td>The connection probably dropped. Download it again.</td></tr>
   </table>
   <p>For anything else, contact your IT team.</p>
 </div>

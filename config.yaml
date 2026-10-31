@@ -149,9 +149,13 @@ vector:
 # a volume -- the compose example mounts one there -- and back it up. Only
 # document ids are stored; results are re-checked against the viewer's
 # roles every time.
+#   max_download_mb  largest "Download all" zip, before compression. Files
+#                    are fetched to temporary disk one at a time, so it only
+#                    needs room for the largest file.
 # ---------------------------------------------------------------------
 collections:
   db_path: "${COLLECTIONS_DB:-}"
+  max_download_mb: "${COLLECTION_DOWNLOAD_MAX_MB:-2048}"
 
 # ---------------------------------------------------------------------
 # Sources -- one "Search in:" button each (plus "All"). host is the
