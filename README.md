@@ -34,6 +34,16 @@ so it can front any index that carries per-document roles.
   docked at the left or right of wide windows. A timeline view charts a
   collection's documents by date, as shaded squares or bars; click or drag
   the chart to zoom in. A collection's files can be downloaded as one zip.
+- An evidence board for each collection: lay out its documents on a canvas
+  with notes, people, places, organisations and events, frame them in groups,
+  draw labelled connections, and step through time with a date-range slider.
+  Named versions keep copies of a board to go back to.
+  Suggestions propose connections (attachments, threads, identical text, named
+  people and places, similar wording) and groupings, with reasons, for the user
+  to accept. They use metadata and text, and don't need vector search. With it
+  on, they also suggest documents similar in meaning, quoting the passages that
+  matched, and use vectors to sort cards into topics. Topics carry an advisory
+  label for how clearly they share wording.
 - A user guide for people searching, at `/help`, linked from the search and
   sign-in pages. It adapts to the configuration (sources, filters, whether
   semantic search is on).
@@ -76,11 +86,11 @@ come from the environment.
 | `auth.ldap` | LDAP URL, bind template, base DN, username attribute |
 | `security` | Role field and how user, group and default roles are encoded. Must match the indexer |
 | `fields` | Map of UI field names to index field names |
-| `extra_fields`, `search_fields` | Extra fields to display; fields to search, with boosts |
+| `extra_fields`, `search_fields` | Extra fields to display; fields to search, with boosts. The `email_thread_*`, `email_in_reply_to` and `email_references` fields need a Pelican that indexes them; without them, thread suggestions fall back to subject and participants |
 | `sources` | Scope buttons, and what each source's results do (download or link) |
 | `filters`, `types` | Filter list; file-type aliases and groups |
 | `downloads` | Downloaders by URL scheme (`smb`, using a `shares.yaml`) |
-| `vector` | Semantic and hybrid search (`VECTOR_ENABLED`), off by default. Needs Pelican's vector search; adds a Keyword / Semantic / Hybrid switch |
+| `vector` | Semantic and hybrid search (`VECTOR_ENABLED`), off by default. Needs Pelican's vector search; adds a Keyword / Semantic / Hybrid switch, and improves board suggestions |
 | `collections` | Where users' collections are stored: an SQLite file, `data/collections.db` by default (`/app/data` in the image; `COLLECTIONS_DB` to move it) |
 
 Collections live in that file, so keep it on a volume and back it up: the
@@ -88,7 +98,9 @@ compose example mounts the `frogmouth-data` volume at `/app/data`. Without
 a volume they're lost whenever the container is recreated. Only document
 ids are stored; what a user sees of a collection is looked up again with
 their current permissions, so items they've lost access to drop out of
-view.
+view. Boards are kept in the same file: positions, document ids and what the
+user typed or accepted, such as notes, labels and group titles. A suggested
+group title can come from documents, and stays if access to them is later lost.
 
 To add a logo, mount a folder at `/app/public/branding` and set
 `app.logo: "/branding/logo.png"`.

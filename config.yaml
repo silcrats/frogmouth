@@ -108,6 +108,10 @@ extra_fields:
   - email_subject
   - email_attachments
   - email_message_id
+  - email_thread_id
+  - email_in_reply_to
+  - email_references
+  - email_thread_index
   - image_camera_make
   - image_camera_model
   - image_gps_lat
@@ -139,6 +143,9 @@ search_fields:
 vector:
   enabled: "${VECTOR_ENABLED:-false}"
   field: content_embedding
+  # The passages' text, in the same order as their vectors. Quoted as evidence
+  # for the board's "similar meaning" suggestions.
+  chunk_field: content_chunks
   k: 100
   default_mode: hybrid
 
