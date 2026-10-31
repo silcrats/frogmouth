@@ -611,9 +611,131 @@
   .inline-error { flex: 1 1 100%; order: 9; color: #e0897a; font-size: 12px; padding-top: 4px; }
   .collection-new.with-description { flex-wrap: wrap; }
   .collection-new.with-description textarea { flex: 1 1 100%; order: 2; min-height: 44px; }
+  .collection-banner .banner-note { flex: 1 1 100%; order: 4; color: var(--text-dim); font-size: 12px; }
   .collection-banner .banner-desc {
     flex: 1 1 100%; order: 3; color: var(--text-dim); font-size: 12.5px; white-space: pre-line;
   }
+  /* Wider than the results column when the window has room, for a year of
+     squares, and still centred on it. --page-width leaves out a docked panel. */
+  body { --page-width: 100vw; }
+  .timeline {
+    --timeline-width: min(1200px, calc(var(--page-width) - 40px));
+    position: relative; width: var(--timeline-width); max-width: var(--timeline-width);
+    left: min(0px, calc((100% - var(--timeline-width)) / 2));
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; margin-bottom: 14px;
+  }
+  .timeline[hidden] { display: none; }
+  .timeline-head {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px;
+    font-family: var(--mono); font-size: 11px; color: var(--text-dim); min-height: 24px; margin-bottom: 8px;
+  }
+  .timeline-head button {
+    background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+    font-family: var(--mono); font-size: 11px; padding: 4px 9px; border-radius: 6px; cursor: pointer;
+  }
+  .timeline-head button:hover { color: var(--accent); border-color: var(--accent-dim); }
+  .timeline-bars {
+    display: flex; align-items: stretch; height: 110px; border-bottom: 1px solid var(--border);
+    touch-action: none; user-select: none;
+  }
+  /* The whole column is the target, so short bars are as easy to hit as tall
+     ones; the gap between bars is transparent padding on the column. */
+  .timeline-bar {
+    flex: 1 1 0; min-width: 0; height: 100%; background: transparent; border: none; border-radius: 0;
+    padding: 0 1px; display: flex; align-items: flex-end; cursor: pointer;
+  }
+  .timeline-bar:hover, .timeline-bar.selecting { background: rgba(95, 179, 163, 0.14); }
+  .timeline-bar:focus-visible { outline: 2px solid var(--text); outline-offset: -2px; }
+  .timeline-bar .mark {
+    display: block; width: 100%; max-width: 32px; margin: 0 auto;
+    background: var(--accent); border-radius: 4px 4px 0 0;
+  }
+  .timeline-axis {
+    display: flex; justify-content: space-between; gap: 12px; margin-top: 6px;
+    font-family: var(--mono); font-size: 11px; color: var(--text-dim);
+  }
+  .timeline-hint { margin-top: 6px; font-size: 12px; color: var(--text-dim); }
+  .timeline-actions { display: flex; gap: 6px; }
+  .timeline-head button.active { color: var(--accent); border-color: var(--accent-dim); }
+  .timeline-scroll { overflow: auto; max-height: 420px; margin: 16px 0; }
+  .timeline-squares {
+    --square: 14px; display: grid; gap: 2px; width: max-content; user-select: none;
+    touch-action: pan-x pan-y; /* a swipe scrolls here; a tap still zooms */
+  }
+  /* Days fill the panel, up to a limit so a short range doesn't balloon. */
+  .timeline-squares.unit-day { --square: 10px; width: 100%; justify-content: start; gap: 3px; }
+  .timeline-squares.unit-day .timeline-square { width: 100%; height: auto; aspect-ratio: 1; border-radius: 3px; }
+  @media (max-width: 900px) { .timeline-squares.unit-day { gap: 2px; } }
+  /* The last day of a month. A clip-path cuts off outlines too, so hovering,
+     selecting and keyboard focus brighten these instead. */
+  .timeline-squares.unit-day .timeline-square.month-end {
+    border-radius: 0; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  }
+  /* Grey, not a teal shade, so that an empty day doesn't look like it has documents. */
+  .timeline-square.month-end.shade-0, .timeline-square.month-end.shade-0:hover { background: #626a78; }
+  .timeline-square.month-end:hover, .timeline-square.month-end.selecting, .timeline-square.month-end:focus-visible {
+    filter: brightness(1.7);
+  }
+  .timeline-square-label {
+    font-family: var(--mono); font-size: 10px; line-height: 1; color: var(--text-dim); white-space: nowrap;
+  }
+  .timeline-square-label.row { padding-right: 6px; align-self: center; }
+  .timeline-square-label.col { padding-bottom: 4px; }
+  button.timeline-square-label {
+    background: none; border: none; border-radius: 0; font-weight: 400; cursor: pointer;
+    text-align: left; text-decoration: underline; text-decoration-color: var(--accent-dim); text-underline-offset: 2px;
+  }
+  button.timeline-square-label:hover { background: none; color: var(--accent); text-decoration-color: var(--accent); }
+  button.timeline-square-label:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+  .timeline-head .timeline-period { color: var(--text); font-weight: 600; }
+  /* Month names sit over several narrow columns; let them run across. */
+  .unit-day .timeline-square-label.col { width: 0; }
+  .timeline-square {
+    display: block; width: var(--square, 10px); height: var(--square, 10px); padding: 0;
+    border: none; border-radius: 2px; cursor: pointer; transition: none;
+  }
+  .timeline-square:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+  .timeline-square:hover, .timeline-square.selecting { outline: 1px solid var(--text); outline-offset: 0; }
+  /* button:hover would otherwise replace the shade. */
+  .timeline-square.shade-0, .timeline-square.shade-0:hover { background: #2a2e36; }
+  .timeline-square.shade-1, .timeline-square.shade-1:hover { background: #2a5f56; }
+  .timeline-square.shade-2, .timeline-square.shade-2:hover { background: #3d8a7c; }
+  .timeline-square.shade-3, .timeline-square.shade-3:hover { background: #5fb3a3; }
+  .timeline-square.shade-4, .timeline-square.shade-4:hover { background: #a3e6d8; }
+  .timeline-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; }
+  .timeline-legend {
+    display: flex; align-items: center; gap: 3px; margin-top: 6px;
+    font-family: var(--mono); font-size: 10px; color: var(--text-dim);
+  }
+  .timeline-legend .timeline-square { cursor: default; }
+  .timeline-legend .timeline-square:first-of-type { margin-left: 3px; }
+  .timeline-legend .timeline-square:last-of-type { margin-right: 3px; }
+  .select-bar {
+    position: sticky; top: 0; z-index: 15; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; margin-bottom: 12px; font-size: 12.5px; color: var(--text-dim);
+  }
+  .select-bar[hidden] { display: none; }
+  .select-bar.has-selection { border-color: var(--accent-dim); }
+  .select-bar .select-count { font-family: var(--mono); font-size: 11.5px; margin-right: auto; }
+  .select-bar.has-selection .select-count { color: var(--accent); }
+  .select-bar button {
+    background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+    font-family: var(--mono); font-size: 11px; font-weight: 400; padding: 4px 9px; border-radius: 6px; cursor: pointer;
+  }
+  .select-bar button:hover { color: var(--accent); border-color: var(--accent-dim); background: transparent; }
+  .select-bar .select-add { color: var(--accent); border-color: var(--accent-dim); }
+  .select-bar .select-message { flex: 1 1 100%; color: var(--text); line-height: 1.5; }
+  .select-bar .select-message[hidden] { display: none; }
+  .select-bar .select-message button { margin-left: 6px; }
+  .select-bar .inline-error { order: 0; }
+  .collect-menu .menu-title { color: var(--text-dim); font-size: 12px; padding-bottom: 6px; line-height: 1.4; }
+  .collect-menu .bulk-choice { display: flex; width: 100%; justify-content: space-between; margin-bottom: 4px; text-align: left; color: var(--text); font-family: var(--sans); font-size: 13px; }
+  .result-heading { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+  .result-select { display: flex; padding: 3px 0; cursor: pointer; flex-shrink: 0; }
+  .result-select input { width: 15px; height: 15px; margin: 0; cursor: pointer; accent-color: var(--accent); }
+  .result.selected { border-color: var(--accent-dim); }
   /* Left/Right: a full-height sidebar at that edge, with the results column
      centred in the space left over. Narrower windows keep it on top. */
   @media (min-width: 1100px) {
@@ -623,8 +745,8 @@
     }
     body.dock-left .collections-panel { left: 0; border-left: none; }
     body.dock-right .collections-panel { right: 0; border-right: none; }
-    body.dock-left.collections-open { padding-left: 280px; }
-    body.dock-right.collections-open { padding-right: 280px; }
+    body.dock-left.collections-open { padding-left: 280px; --page-width: calc(100vw - 280px); }
+    body.dock-right.collections-open { padding-right: 280px; --page-width: calc(100vw - 280px); }
   }
   @media (max-width: 1099px) {
     .dock-switch .dock-side { display: none; }
@@ -716,6 +838,7 @@
     </div>
 
     <div class="collection-banner" id="collectionBanner" hidden></div>
+    <div class="timeline" id="timeline" hidden></div>
 
     <div class="meta-row">
       <span id="metaRow"></span>
@@ -728,6 +851,15 @@
           <option value="100">100</option>
         </select>
       </div>
+    </div>
+
+    <div class="select-bar" id="selectBar" hidden>
+      <span class="select-count" id="selectCount" aria-live="polite"></span>
+      <button type="button" id="selectPage">Select page</button>
+      <button type="button" id="selectClear">Clear</button>
+      <div class="collect-wrap"><button type="button" class="select-add" id="selectAdd">Add selected to collection</button></div>
+      <div class="collect-wrap"><button type="button" id="selectAddAll"></button></div>
+      <div class="select-message" id="selectMessage" hidden></div>
     </div>
 
     <div class="results" id="results">
@@ -1239,6 +1371,14 @@
     });
   }
 
+  // What a document's main date is: an email's sent date, a photo's capture
+  // date, or otherwise its file's modified time (which it then equals).
+  function dateSource(doc, isMail) {
+    if (isMail || firstOf(doc.email_from) || firstOf(doc.email_subject)) return 'Sent';
+    const modified = new Date(firstOf(doc.modified)).getTime();
+    return new Date(firstOf(doc.created)).getTime() === modified ? 'Modified' : 'Taken';
+  }
+
   // emptyHtml: what to show instead of the usual "nothing found" message.
   function renderResults(data, emptyHtml) {
     resultsEl.innerHTML = '';
@@ -1246,6 +1386,7 @@
     if ((!data.docs || data.docs.length === 0) && emptyHtml) {
       resultsEl.innerHTML = emptyHtml;
       pager.style.display = 'none';
+      updateSelectBar();
       return;
     }
     if (!data.docs || data.docs.length === 0) {
@@ -1258,6 +1399,7 @@
           ${emptyMsg}
         </div>`;
       pager.style.display = 'none';
+      updateSelectBar();
       return;
     }
 
@@ -1305,7 +1447,7 @@
       if (share) metaParts.push(`<span>${escapeHtml(share)}</span>`);
       if (sender) metaParts.push(`<span>${escapeHtml(sender)}</span>`);
       if (mimetype) metaParts.push(`<span>${escapeHtml(mimetype)}</span>`);
-      if (created) metaParts.push(`<span>${created}</span>`);
+      if (created) metaParts.push(`<span>${collectionView === 'timeline' ? `${dateSource(doc, isMail)}: ` : ''}${created}</span>`);
       if (allOf(doc.email_attachments).length) metaParts.push(`<span title="Has attachments">&#128206; ${allOf(doc.email_attachments).length}</span>`);
 
       // Build the full-detail fields shown once expanded. Anything not
@@ -1373,7 +1515,10 @@
       div.className = 'result';
       div.innerHTML = `
         <div class="result-header">
-          <div class="result-title">${escapeHtml(title)}</div>
+          <div class="result-heading">
+            <label class="result-select" title="Select this result (Shift-click to select a run of them)"><input type="checkbox" class="result-check" aria-label="Select ${escapeHtml(title)}"></label>
+            <div class="result-title">${escapeHtml(title)}</div>
+          </div>
           <div class="result-actions">
             ${actionButtonsHtml}
             <div class="collect-wrap">
@@ -1392,6 +1537,11 @@
           <div class="detail-body"><em>Loading…</em></div>
         </div>
       `;
+
+      const check = div.querySelector('.result-check');
+      check.dataset.id = doc.id;
+      check.checked = selectedDocs.has(doc.id);
+      div.classList.toggle('selected', check.checked);
 
       div.querySelector('.collect-btn').addEventListener('click', e => {
         e.stopPropagation();
@@ -1417,6 +1567,8 @@
       resultsEl.appendChild(div);
     });
 
+    lastChecked = null;
+    updateSelectBar();
     pager.style.display = data.numFound > ROWS_PER_PAGE ? 'flex' : 'none';
     prevBtn.disabled = currentStart === 0;
     nextBtn.disabled = currentStart + ROWS_PER_PAGE >= data.numFound;
@@ -1440,6 +1592,7 @@
 
   async function runSearch(q, start = 0) {
     leaveCollectionView();
+    selectMessage.hidden = true;
     currentQuery = q;
     currentStart = start;
     hasSearched = true;
@@ -1517,7 +1670,13 @@
   const newCollectionDescription = document.getElementById('newCollectionDescription');
   const collectionBanner = document.getElementById('collectionBanner');
   let openCollection = null;    // { id, name } while a collection or its "more like these" is showing
-  let collectionView = null;    // 'items', 'semantic' or 'keyword'
+  let collectionView = null;    // 'items', 'timeline', 'semantic' or 'keyword'
+  const timelineEl = document.getElementById('timeline');
+  let timelineRange = null;     // { from, to } while zoomed in on part of the timeline
+  let timelineHistory = [];     // the ranges zoomed in from, for going back; null is all dates
+  let timelineData = null;      // the latest response, to redraw when switching chart
+  const TIMELINE_SHAPE_KEY = 'frogmouth.timelineShape';
+  let timelineShape = loadPref(TIMELINE_SHAPE_KEY) === 'bars' ? 'bars' : 'squares';
 
   async function collectionsApi(method, url, body) {
     const res = await apiFetch(url, {
@@ -1740,21 +1899,224 @@
     try { await render(); } catch (err) { menu.innerHTML = `<em>${escapeHtml(err.message)}</em>`; }
   }
 
+  // Selecting results to add together. The selection lasts across pages and
+  // searches until it's added or cleared.
+  const selectedDocs = new Set();
+  let lastChecked = null;       // the checkbox a Shift-click selects a run from
+  const selectBar = document.getElementById('selectBar');
+  const selectCount = document.getElementById('selectCount');
+  const selectPageBtn = document.getElementById('selectPage');
+  const selectClearBtn = document.getElementById('selectClear');
+  const selectAddBtn = document.getElementById('selectAdd');
+  const selectAddAllBtn = document.getElementById('selectAddAll');
+  const selectMessage = document.getElementById('selectMessage');
+  const pageChecks = () => [...resultsEl.querySelectorAll('.result-check')];
+  const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
+
+  function setChecked(check, on) {
+    check.checked = on;
+    check.closest('.result').classList.toggle('selected', on);
+    if (on) selectedDocs.add(check.dataset.id);
+    else selectedDocs.delete(check.dataset.id);
+  }
+
+  function updateSelectBar() {
+    const checks = pageChecks();
+    const n = selectedDocs.size;
+    selectBar.hidden = !checks.length && !n && selectMessage.hidden;
+    selectBar.classList.toggle('has-selection', n > 0);
+    selectCount.textContent = n ? `${n.toLocaleString()} selected` : 'Tick results to select them';
+    selectPageBtn.hidden = !checks.length;
+    selectPageBtn.textContent = checks.length && checks.every(c => c.checked) ? 'Unselect page' : 'Select page';
+    selectClearBtn.hidden = !n;
+    selectAddBtn.hidden = !n;
+    // Only a search has a set of results to add: a collection's documents are
+    // already in one, and "more like these" isn't a search that can be re-run.
+    const canAddAll = !openCollection && hasSearched && currentTotal > 0;
+    selectAddAllBtn.hidden = !canAddAll;
+    if (canAddAll) selectAddAllBtn.textContent = `Add all ${currentTotal.toLocaleString()} results`;
+  }
+
+  resultsEl.addEventListener('click', e => {
+    const check = e.target.closest('.result-check');
+    if (!check) return;
+    if (e.shiftKey && lastChecked && lastChecked.isConnected) {
+      const checks = pageChecks();
+      const [a, b] = [checks.indexOf(lastChecked), checks.indexOf(check)];
+      checks.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(c => setChecked(c, check.checked));
+    } else {
+      setChecked(check, check.checked);
+    }
+    lastChecked = check;
+    updateSelectBar();
+  });
+  selectPageBtn.addEventListener('click', () => {
+    const checks = pageChecks();
+    const on = !checks.every(c => c.checked);
+    checks.forEach(c => setChecked(c, on));
+    updateSelectBar();
+  });
+  selectClearBtn.addEventListener('click', () => {
+    selectedDocs.clear();
+    pageChecks().forEach(c => setChecked(c, false));
+    updateSelectBar();
+  });
+
+  // After a bulk add: what happened, with a way to take it back.
+  function showBulkResult(collection, result) {
+    const notes = [];
+    if (result.already) notes.push(`${result.already.toLocaleString()} already in it`);
+    if (result.unavailable) notes.push(`${result.unavailable.toLocaleString()} you can no longer open`);
+    let text = `Added ${plural(result.added.length, 'document')} to "${collection.name}"`;
+    if (notes.length) text += ` (${notes.join(', ')})`;
+    text += '.';
+    if (result.over || result.more) text += ` The rest weren't added: a collection holds up to ${maxCollectionItems.toLocaleString()} documents.`;
+    selectMessage.textContent = text;
+    selectMessage.hidden = false;
+    if (result.added.length) {
+      const undo = document.createElement('button');
+      undo.type = 'button';
+      undo.textContent = 'Undo';
+      undo.addEventListener('click', async () => {
+        try {
+          await collectionsApi('POST', `/api/collections/${collection.id}/items/bulk-remove`, { ids: result.added });
+          selectMessage.textContent = `Removed those ${plural(result.added.length, 'document')} from "${collection.name}".`;
+          collectionChanged(collection.id);
+        } catch (err) { selectMessage.textContent = `Couldn't undo that: ${err.message}`; }
+      });
+      selectMessage.appendChild(undo);
+    }
+    updateSelectBar();
+  }
+
+  function collectionChanged(id) {
+    if (openCollection && openCollection.id === id) loadPage(currentStart);
+    refreshPanelIfOpen();
+  }
+
+  let maxCollectionItems = 1000;  // from the server, with each list of collections
+
+  // A menu of collections to add to, or a new one to create. add(id) does the adding.
+  async function openBulkMenu(wrap, title, add) {
+    closeCollectMenus();
+    const menu = document.createElement('div');
+    menu.className = 'collect-menu';
+    menu.innerHTML = '<em>Loading…</em>';
+    wrap.appendChild(menu);
+    const addTo = async (collection, where) => {
+      where.querySelectorAll('button').forEach(b => { b.disabled = true; });
+      try {
+        const result = await add(collection.id);
+        closeCollectMenus();
+        showBulkResult(collection, result);
+        collectionChanged(collection.id);
+      } catch (err) {
+        where.querySelectorAll('button').forEach(b => { b.disabled = false; });
+        showInlineError(menu, err.message);
+      }
+    };
+    try {
+      const data = await collectionsApi('GET', '/api/collections');
+      maxCollectionItems = data.max_items || maxCollectionItems;
+      menu.innerHTML = '';
+      const heading = document.createElement('div');
+      heading.className = 'menu-title';
+      heading.textContent = title();
+      menu.appendChild(heading);
+      for (const c of data.collections) {
+        const choice = document.createElement('button');
+        choice.type = 'button';
+        choice.className = 'bulk-choice';
+        choice.innerHTML = `<span>${escapeHtml(c.name)}</span><span class="count">${c.count}</span>`;
+        choice.addEventListener('click', () => addTo(c, menu));
+        menu.appendChild(choice);
+      }
+      const form = document.createElement('form');
+      form.className = 'collection-new';
+      form.innerHTML = '<input type="text" placeholder="New collection" maxlength="100" autocomplete="off"><button type="submit">Add</button>';
+      form.addEventListener('submit', async e => {
+        e.preventDefault();
+        const name = form.querySelector('input').value.trim();
+        if (!name) return;
+        try {
+          addTo(await collectionsApi('POST', '/api/collections', { name }), menu);
+        } catch (err) { showInlineError(form, err.message); }
+      });
+      menu.appendChild(form);
+    } catch (err) {
+      menu.innerHTML = `<em>${escapeHtml(err.message)}</em>`;
+    }
+  }
+
+  function toggleBulkMenu(button, title, add) {
+    const wrap = button.parentElement;
+    if (wrap.querySelector('.collect-menu')) closeCollectMenus();
+    else openBulkMenu(wrap, title, add);
+  }
+
+  selectAddBtn.addEventListener('click', () => {
+    toggleBulkMenu(selectAddBtn, () => `Add ${plural(selectedDocs.size, 'selected result')} to:`, async id => {
+      const result = await collectionsApi('POST', `/api/collections/${id}/items/bulk`, { ids: [...selectedDocs] });
+      selectedDocs.clear();
+      pageChecks().forEach(c => setChecked(c, false));
+      return result;
+    });
+  });
+  selectAddAllBtn.addEventListener('click', () => {
+    const params = currentFilterParams();
+    params.set('q', currentQuery);
+    if (searchMode !== 'keyword') params.set('mode', searchMode);
+    toggleBulkMenu(selectAddAllBtn, () => `Add all ${plural(currentTotal, 'result')} to:`
+      + (currentTotal > maxCollectionItems ? ` A collection holds up to ${maxCollectionItems.toLocaleString()}, so the best matches go in first.` : ''),
+      id => collectionsApi('POST', `/api/collections/${id}/items/from-search?${params}`));
+  });
+
   // A collection, or documents like it, in the results list.
   function renderBanner() {
     collectionBanner.hidden = false;
-    const views = [['items', 'Items'], ...(semanticAvailable ? [['semantic', 'More like these: semantic']] : []),
+    timelineEl.hidden = collectionView !== 'timeline';
+    const views = [['items', 'Items'], ['timeline', 'Timeline'],
+                   ...(semanticAvailable ? [['semantic', 'More like these: semantic']] : []),
                    ['keyword', 'More like these: keyword']];
     collectionBanner.innerHTML = `<span class="banner-title">Collection: <strong>${escapeHtml(openCollection.name)}</strong></span>
       <div class="banner-views">${views.map(([v, label]) =>
         `<button type="button" data-view="${v}" class="${v === collectionView ? 'active' : ''}">${label}</button>`).join('')}</div>
+      <button type="button" class="banner-download" title="Download this collection's files as one zip">&#8595; Download all</button>
       <button type="button" class="banner-back">Back to search</button>
       ${openCollection.description ? `<div class="banner-desc">${escapeHtml(openCollection.description)}</div>` : ''}`;
     collectionBanner.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => {
       if (b.dataset.view === 'items') showCollection(openCollection, 0);
+      else if (b.dataset.view === 'timeline') { resetTimelineZoom(); showTimeline(0); }
       else showSimilar(b.dataset.view, 0);
     }));
+    collectionBanner.querySelector('.banner-download').addEventListener('click', e => downloadCollection(e.currentTarget));
     collectionBanner.querySelector('.banner-back').addEventListener('click', backToSearch);
+  }
+
+  // The summary first: it reports anything that would stop the download, which
+  // the browser wouldn't show for a link. The link then leaves this page as it is.
+  async function downloadCollection(button) {
+    const url = `/api/collections/${openCollection.id}/download`;
+    clearInlineError(collectionBanner);
+    collectionBanner.querySelector('.banner-note')?.remove();
+    button.disabled = true;
+    try {
+      const { files, linked, bytes } = await collectionsApi('GET', `${url}/summary`);
+      const link = document.createElement('a');
+      link.href = url;
+      link.click();
+      const note = document.createElement('div');
+      note.className = 'banner-note';
+      const size = bytes >= 1024 * 1024 ? `${Math.ceil(bytes / 1024 / 1024).toLocaleString()} MB` : `${Math.ceil(bytes / 1024).toLocaleString()} KB`;
+      note.textContent = `Downloading ${files.toLocaleString()} file${files === 1 ? '' : 's'} as a zip, about ${size} before compression. `
+        + `The browser can't show how far along it is, and it may take a while.`
+        + (linked ? ` ${linked.toLocaleString()} item${linked === 1 ? ' isn\'t a file, so it\'s' : 's aren\'t files, so they\'re'} listed with links in _not-included.txt in the zip.` : '');
+      collectionBanner.appendChild(note);
+    } catch (err) {
+      showInlineError(collectionBanner, err.message);
+    } finally {
+      button.disabled = false;
+    }
   }
 
   async function showView(url, start, describe, emptyHtml) {
@@ -1776,6 +2138,7 @@
       metaRow.innerHTML = `<span class="status-dot err"></span>${escapeHtml(err.message)}`;
       resultsEl.innerHTML = '';
       pager.style.display = 'none';
+      updateSelectBar();
     }
   }
 
@@ -1791,6 +2154,385 @@
       return `${n.toLocaleString()} document${n === 1 ? '' : 's'}`
         + (data.hidden ? ` (${data.hidden} more you can no longer see)` : '');
     }, '<div class="empty-state"><div class="big">// empty collection</div>Add results to it with "+ Collection" on any result.</div>');
+  }
+
+  function resetTimelineZoom() {
+    timelineRange = null;
+    timelineHistory = [];
+  }
+
+  function showTimeline(start) {
+    collectionView = 'timeline';
+    renderBanner();
+    loadPage = showTimeline;
+    const range = timelineRange ? `?from=${timelineRange.from}&to=${timelineRange.to}` : '';
+    return showView(`/api/collections/${openCollection.id}/timeline${range}`, start, data => {
+      if (collectionView === 'timeline') renderTimeline(data);
+      const n = data.numFound;
+      return `${n.toLocaleString()} document${n === 1 ? '' : 's'}, oldest first`
+        + (data.hidden ? ` (${data.hidden} more you can no longer see)` : '');
+    }, timelineRange
+      ? '<div class="empty-state"><div class="big">// nothing in this period</div>Choose "Back" or "Reset View" to see more of the timeline.</div>'
+      : '<div class="empty-state"><div class="big">// empty collection</div>Add results to it with "+ Collection" on any result.</div>');
+  }
+
+  // A bucket's name; periods are UTC, so they're formatted as UTC too.
+  function timelineLabel(bucket, unit) {
+    const date = new Date(`${bucket.start}T00:00:00Z`);
+    const fmt = opts => date.toLocaleDateString(undefined, { timeZone: 'UTC', ...opts });
+    if (unit === 'day') return fmt({ year: 'numeric', month: 'short', day: 'numeric' });
+    if (unit === 'month') return fmt({ year: 'numeric', month: 'short' });
+    return unit === 'decade' ? `${bucket.start.slice(0, 4)}s` : bucket.start.slice(0, 4);
+  }
+
+  // The chart above the list: a square per period (like a contribution graph)
+  // or a bar per period, whichever this browser last chose. Clicking one or
+  // dragging across several zooms the chart and the list in on that range.
+  function renderTimeline(data) {
+    timelineData = data;
+    const squares = timelineShape === 'squares' ? squaresModel(data) : null;
+    const unit = squares ? squares.unit : data.unit;
+    const dated = data.buckets.reduce((sum, b) => sum + b.count, 0);
+    const undatedNote = data.undated ? ` · ${data.undated} undated${timelineRange ? ' (not shown)' : ', listed last'}` : '';
+    const periodUnit = zoomedPeriodUnit();
+    const steps = periodUnit ? adjacentPeriods(data.all_days || [], periodUnit) : {};
+    const periodName = range => escapeHtml(timelineLabel({ start: range.from }, periodUnit));
+    timelineEl.innerHTML = `<div class="timeline-head">
+        <span>${periodUnit ? `<span class="timeline-period">${periodName(timelineRange)}</span> · ` : ''}${dated.toLocaleString()} dated document${dated === 1 ? '' : 's'} by ${unit || 'date'}${undatedNote}</span>
+        <div class="timeline-actions">
+          ${steps.previous ? `<button type="button" class="timeline-previous" title="The previous ${periodUnit} with documents">&larr; ${periodName(steps.previous)}</button>` : ''}
+          ${steps.next ? `<button type="button" class="timeline-next" title="The next ${periodUnit} with documents">${periodName(steps.next)} &rarr;</button>` : ''}
+          ${[['squares', 'Squares'], ['bars', 'Bars']].map(([shape, label]) =>
+            `<button type="button" data-shape="${shape}" class="${shape === timelineShape ? 'active' : ''}">${label}</button>`).join('')}
+          ${timelineRange ? `<button type="button" class="timeline-back">&larr; Back</button>
+            <button type="button" class="timeline-reset">Reset View</button>` : ''}
+        </div>
+      </div>`;
+    timelineEl.querySelectorAll('[data-shape]').forEach(b => b.addEventListener('click', () => {
+      timelineShape = b.dataset.shape;
+      savePref(TIMELINE_SHAPE_KEY, timelineShape);
+      renderTimeline(timelineData);
+    }));
+    // Moving along stays at the same zoom level, so it isn't another step for Back.
+    [['.timeline-previous', steps.previous], ['.timeline-next', steps.next]].forEach(([selector, range]) => {
+      if (!range) return;
+      timelineEl.querySelector(selector).addEventListener('click', () => {
+        timelineRange = range;
+        showTimeline(0);
+      });
+    });
+    if (timelineRange) {
+      timelineEl.querySelector('.timeline-back').addEventListener('click', () => {
+        timelineRange = timelineHistory.pop() || null;
+        showTimeline(0);
+      });
+      timelineEl.querySelector('.timeline-reset').addEventListener('click', () => {
+        resetTimelineZoom();
+        showTimeline(0);
+      });
+    }
+    if (!data.buckets.length) return;
+    if (squares) renderSquares(squares);
+    else renderBars(data);
+  }
+
+  const docCount = n => `${n.toLocaleString()} document${n === 1 ? '' : 's'}`;
+
+  function zoomTimeline(range) {
+    if (timelineRange && timelineRange.from === range.from && timelineRange.to === range.to) return;
+    timelineHistory.push(timelineRange);
+    timelineRange = range;
+    showTimeline(0);
+  }
+
+  // The day, month, year or decade starting on a date, as { from, to }.
+  function periodRange(start, unit) {
+    const year = Number(start.slice(0, 4));
+    if (unit === 'day') return { from: start, to: addDays(start, 1) };
+    if (unit === 'year') return { from: start, to: `${isoYear(year + 1)}-01-01` };
+    if (unit === 'decade') return { from: start, to: `${isoYear(year + 10)}-01-01` };
+    const month = Number(start.slice(5, 7));
+    return { from: start, to: month === 12 ? `${isoYear(year + 1)}-01-01` : `${isoYear(year)}-${String(month + 1).padStart(2, '0')}-01` };
+  }
+
+  function periodStart(date, unit) {
+    if (unit === 'day') return date;
+    if (unit === 'month') return `${date.slice(0, 7)}-01`;
+    const year = Number(date.slice(0, 4));
+    return `${isoYear(unit === 'decade' ? year - year % 10 : year)}-01-01`;
+  }
+
+  // Which whole period the current zoom is, if it's exactly one (a drag can
+  // cover any stretch of dates, which has no obvious next one).
+  function zoomedPeriodUnit() {
+    if (!timelineRange) return null;
+    return ['day', 'month', 'year', 'decade'].find(unit =>
+      periodStart(timelineRange.from, unit) === timelineRange.from
+        && periodRange(timelineRange.from, unit).to === timelineRange.to) || null;
+  }
+
+  // The nearest periods of the same kind that have documents, so that moving
+  // through a sparse collection doesn't land on blank views.
+  function adjacentPeriods(allDays, unit) {
+    const before = allDays.filter(d => d < timelineRange.from).pop();
+    const after = allDays.find(d => d >= timelineRange.to);
+    const range = date => date ? periodRange(periodStart(date, unit), unit) : null;
+    return { previous: range(before), next: range(after) };
+  }
+
+  // Click or drag across a chart's [data-index] elements (periods, in date
+  // order) to zoom in on them. A drag is a continuous run of dates, so on the
+  // squares it wraps from one row to the next.
+  function makeZoomable(chart, periods, unit) {
+    const zoomTo = (a, b) => {
+      const [first, last] = [periods[Math.min(a, b)], periods[Math.max(a, b)]];
+      // A whole chart of days can't go any finer.
+      if (unit === 'day' && first === periods[0] && last === periods[periods.length - 1]) return;
+      // Nor is there anything to see in a stretch with no documents.
+      if (!periods.slice(Math.min(a, b), Math.max(a, b) + 1).some(p => p.count)) return;
+      zoomTimeline({ from: first.start, to: last.end });
+    };
+    const indexAt = e => {
+      const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-index]');
+      return el && chart.contains(el) ? Number(el.dataset.index) : null;
+    };
+    let dragFrom = null;
+    let dragTo = null;
+    const markSelection = () => {
+      const [lo, hi] = dragFrom === null ? [1, 0] : [Math.min(dragFrom, dragTo), Math.max(dragFrom, dragTo)];
+      chart.querySelectorAll('[data-index]').forEach(el => {
+        const i = Number(el.dataset.index);
+        el.classList.toggle('selecting', i >= lo && i <= hi);
+      });
+    };
+    chart.addEventListener('pointerdown', e => {
+      const i = indexAt(e);
+      if (i === null || e.button !== 0) return;
+      dragFrom = dragTo = i;
+      chart.setPointerCapture(e.pointerId);
+      markSelection();
+    });
+    chart.addEventListener('pointermove', e => {
+      if (dragFrom === null) return;
+      const i = indexAt(e);
+      if (i !== null) dragTo = i;
+      markSelection();
+    });
+    chart.addEventListener('pointerup', () => {
+      if (dragFrom === null) return;
+      const [a, b] = [dragFrom, dragTo];
+      dragFrom = dragTo = null;
+      markSelection();
+      zoomTo(a, b);
+    });
+    chart.addEventListener('pointercancel', () => {
+      dragFrom = dragTo = null;
+      markSelection();
+    });
+    // Enter or Space on a focused period; pointer clicks are handled above.
+    chart.addEventListener('click', e => {
+      const el = e.target.closest('[data-index]');
+      if (el && e.detail === 0) zoomTo(Number(el.dataset.index), Number(el.dataset.index));
+    });
+  }
+
+  function timelineHint(text) {
+    const hint = document.createElement('div');
+    hint.className = 'timeline-hint';
+    hint.textContent = text;
+    return hint;
+  }
+
+  function renderBars(data) {
+    const { buckets, unit } = data;
+    const peak = Math.max(...buckets.map(b => b.count));
+    const bars = document.createElement('div');
+    bars.className = 'timeline-bars';
+    buckets.forEach((b, i) => {
+      const label = `${timelineLabel(b, unit)}: ${docCount(b.count)}`;
+      const bar = document.createElement('button');
+      bar.type = 'button';
+      bar.className = 'timeline-bar';
+      bar.dataset.index = i;
+      bar.title = label;
+      bar.setAttribute('aria-label', label);
+      if (b.count) {
+        const mark = document.createElement('span');
+        mark.className = 'mark';
+        // A floor so that one document among thousands still shows.
+        mark.style.height = `max(3px, ${(b.count / peak) * 100}%)`;
+        bar.appendChild(mark);
+      }
+      bars.appendChild(bar);
+    });
+    makeZoomable(bars, buckets, unit);
+
+    const axis = document.createElement('div');
+    axis.className = 'timeline-axis';
+    axis.innerHTML = `<span>${escapeHtml(timelineLabel(buckets[0], unit))}</span>`
+      + (buckets.length > 1 ? `<span>${escapeHtml(timelineLabel(buckets[buckets.length - 1], unit))}</span>` : '');
+    timelineEl.append(bars, axis, timelineHint(`Tallest bar: ${docCount(peak)}. Click a bar or drag across several to zoom in.`));
+  }
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const isoYear = y => String(y).padStart(4, '0');
+  const addDays = (iso, n) => {
+    const d = new Date(`${iso}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  const SQUARES_MAX_MONTH_ROWS = 40;
+
+  // Up to a year: a square per day, in week columns. Longer: a row per year
+  // with a square per month. Longer still: a row per decade with a square per
+  // year. Zoomed in, the grid covers the whole chosen range, not just the part
+  // with documents. Each cell has its row and column, and start and end dates.
+  function squaresModel(data) {
+    const days = data.days || [];
+    if (!days.length) return null;
+    const first = timelineRange ? timelineRange.from : days[0].date;
+    const last = timelineRange ? addDays(timelineRange.to, -1) : days[days.length - 1].date;
+    const [y0, y1] = [Number(first.slice(0, 4)), Number(last.slice(0, 4))];
+    const span = (Date.parse(last) - Date.parse(first)) / DAY_MS;
+    const unit = span <= 366 ? 'day' : y1 - y0 <= SQUARES_MAX_MONTH_ROWS ? 'month' : 'year';
+    const keyLength = { day: 10, month: 7, year: 4 }[unit];
+    const counts = new Map();
+    days.forEach(d => {
+      const key = d.date.slice(0, keyLength);
+      counts.set(key, (counts.get(key) || 0) + d.count);
+    });
+
+    const cells = [];
+    const add = (start, end, row, col) => cells.push({ start, end, row, col, count: counts.get(start.slice(0, keyLength)) || 0 });
+    if (unit === 'day') {
+      const lead = new Date(Date.parse(first)).getUTCDay();
+      for (let d = first; d <= last; d = addDays(d, 1)) {
+        const offset = Math.round((Date.parse(d) - Date.parse(first)) / DAY_MS);
+        add(d, addDays(d, 1), new Date(Date.parse(d)).getUTCDay(), Math.floor((offset + lead) / 7));
+      }
+    } else if (unit === 'month') {
+      const lastMonth = last.slice(0, 7);
+      for (let y = y0; y <= y1; y++) {
+        for (let m = 1; m <= 12; m++) {
+          const month = `${isoYear(y)}-${String(m).padStart(2, '0')}`;
+          if (month < first.slice(0, 7) || month > lastMonth) continue;
+          const next = m === 12 ? `${isoYear(y + 1)}-01` : `${isoYear(y)}-${String(m + 1).padStart(2, '0')}`;
+          add(`${month}-01`, `${next}-01`, y - y0, m - 1);
+        }
+      }
+    } else {
+      for (let y = y0; y <= y1; y++) {
+        add(`${isoYear(y)}-01-01`, `${isoYear(y + 1)}-01-01`, Math.floor(y / 10) - Math.floor(y0 / 10), y % 10);
+      }
+    }
+    return { unit, cells, y0 };
+  }
+
+  // Shades by rank among the periods with documents, as quarters, so that one
+  // very busy period doesn't leave all the others in the palest shade.
+  function shadeLevels(cells) {
+    const sorted = cells.map(c => c.count).filter(Boolean).sort((a, b) => a - b);
+    return count => {
+      if (!count) return 0;
+      const atOrBelow = sorted.filter(n => n <= count).length;
+      return Math.ceil((atOrBelow / sorted.length) * 4);
+    };
+  }
+
+  function renderSquares({ unit, cells, y0 }) {
+    const utc = (iso, opts) => new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, { timeZone: 'UTC', ...opts });
+    const rows = Math.max(...cells.map(c => c.row)) + 1;
+    const cols = Math.max(...cells.map(c => c.col)) + 1;
+    const grid = document.createElement('div');
+    grid.className = `timeline-squares unit-${unit}`;
+    const size = unit === 'day' ? 'minmax(10px, 20px)' : 'var(--square)';
+    grid.style.gridTemplateColumns = `auto repeat(${cols}, ${size})`;
+    grid.style.gridTemplateRows = `auto repeat(${rows}, ${unit === 'day' ? 'auto' : size})`;
+    // period: the { start, unit } a label opens, if it has documents to show.
+    const addLabel = (text, row, col, cls, period) => {
+      let range = period ? periodRange(period.start, period.unit) : null;
+      if (range && !cells.some(c => c.count && c.start >= range.from && c.start < range.to)) range = null;
+      if (range && timelineRange && range.from === timelineRange.from && range.to === timelineRange.to) range = null;
+      const el = document.createElement(range ? 'button' : 'div');
+      el.className = `timeline-square-label ${cls}`;
+      el.textContent = text;
+      if (range) {
+        el.type = 'button';
+        el.title = `Open ${text}`;
+        el.addEventListener('click', () => zoomTimeline(range));
+      }
+      el.style.gridRow = row + 2;
+      el.style.gridColumn = col + 2;
+      grid.appendChild(el);
+    };
+
+    if (unit === 'day') {
+      // Sunday-first rows, as the week columns are; Monday, Wednesday, Friday named.
+      [[1, '2024-01-01'], [3, '2024-01-03'], [5, '2024-01-05']].forEach(([row, sample]) => {
+        addLabel(utc(sample, { weekday: 'short' }), row, -1, 'row');
+      });
+      // A month's name over the week it starts in, if there's room for it.
+      let lastLabelled = -3;
+      cells.forEach(c => {
+        const startsMonth = c.start.endsWith('-01') || c === cells[0];
+        if (!startsMonth || c.col - lastLabelled < 3) return;
+        const month = periodStart(c.start, 'month');
+        addLabel(utc(c.start, { month: 'short' }), -1, c.col, 'col', { start: month, unit: 'month' });
+        lastLabelled = c.col;
+      });
+    } else if (unit === 'month') {
+      for (let m = 0; m < 12; m++) {
+        addLabel(utc(`2024-${String(m + 1).padStart(2, '0')}-01`, { month: 'narrow' }), -1, m, 'col');
+      }
+      for (let r = 0; r < rows; r++) addLabel(isoYear(y0 + r), r, -1, 'row', { start: `${isoYear(y0 + r)}-01-01`, unit: 'year' });
+    } else {
+      for (let y = 0; y < 10; y++) addLabel(String(y), -1, y, 'col');
+      for (let r = 0; r < rows; r++) {
+        const decade = isoYear((Math.floor(y0 / 10) + r) * 10);
+        addLabel(`${decade}s`, r, -1, 'row', { start: `${decade}-01-01`, unit: 'decade' });
+      }
+    }
+
+    const level = shadeLevels(cells);
+    cells.forEach((c, i) => {
+      const label = `${timelineLabel(c, unit)}: ${docCount(c.count)}`;
+      const square = document.createElement('button');
+      square.type = 'button';
+      const monthEnd = unit === 'day' && addDays(c.start, 1).endsWith('-01');
+      square.className = `timeline-square shade-${level(c.count)}${monthEnd ? ' month-end' : ''}`;
+      square.dataset.index = i;
+      square.title = label;
+      square.setAttribute('aria-label', label);
+      // One tab stop for the whole grid; the arrow keys move within it.
+      square.tabIndex = i === 0 ? 0 : -1;
+      square.style.gridRow = c.row + 2;
+      square.style.gridColumn = c.col + 2;
+      grid.appendChild(square);
+    });
+    grid.addEventListener('keydown', e => {
+      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+      const el = e.target.closest('[data-index]');
+      if (!step || !el) return;
+      const next = grid.querySelector(`[data-index="${Number(el.dataset.index) + step}"]`);
+      if (!next) return;
+      e.preventDefault();
+      el.tabIndex = -1;
+      next.tabIndex = 0;
+      next.focus();
+    });
+    makeZoomable(grid, cells, unit);
+
+    const scroll = document.createElement('div');
+    scroll.className = 'timeline-scroll';
+    scroll.appendChild(grid);
+    const foot = document.createElement('div');
+    foot.className = 'timeline-foot';
+    foot.append(timelineHint(`Click a square or a ${unit === 'day' ? 'month' : unit === 'month' ? 'year' : 'decade'}, or drag across several squares, to zoom in. Hover for the count.${unit === 'day' ? ' Hexagons mark the last day of each month.' : ''}`));
+    const legend = document.createElement('div');
+    legend.className = 'timeline-legend';
+    legend.innerHTML = `Less ${[0, 1, 2, 3, 4].map(n => `<span class="timeline-square shade-${n}"></span>`).join('')} More`;
+    foot.append(legend);
+    timelineEl.append(scroll, foot);
   }
 
   function showSimilar(mode, start) {
@@ -1813,6 +2555,8 @@
     openCollection = null;
     collectionView = null;
     collectionBanner.hidden = true;
+    timelineEl.hidden = true;
+    resetTimelineZoom();
     loadPage = s => runSearch(currentQuery, s);
     if (was) refreshPanelIfOpen();
   }
@@ -1824,6 +2568,7 @@
       resultsEl.innerHTML = '<div class="empty-state"><div class="big">// ready</div>Enter a search term above to query the index.</div>';
       metaRow.textContent = '';
       pager.style.display = 'none';
+      updateSelectBar();
     }
   }
 </script>

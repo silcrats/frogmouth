@@ -27,10 +27,13 @@ so it can front any index that carries per-document roles.
   characters), email headers, and image camera and location metadata.
 - Per-source result actions: download over SMB, or open the item (and its
   folder) by link.
-- Private collections: save results to named lists with descriptions, kept
+- Private collections: save results to named lists with descriptions (one at
+  a time, a selection across pages, or all of a search's results), kept
   on disk, and find more like them by keyword or, with vector search, by
   meaning (using the description too). Shown on top of the results or
-  docked at the left or right of wide windows.
+  docked at the left or right of wide windows. A timeline view charts a
+  collection's documents by date, as shaded squares or bars; click or drag
+  the chart to zoom in. A collection's files can be downloaded as one zip.
 - A user guide for people searching, at `/help`, linked from the search and
   sign-in pages. It adapts to the configuration (sources, filters, whether
   semantic search is on).
@@ -103,6 +106,10 @@ containing it. Files are fetched with Samba's `smbget` (in the image), which
 signs in with NTLMv2 over SMB 2/3. Traffic is signed, and encrypted for an
 entry with `encrypt: true`. A password can't start with a space.
 
+"Download all" on a collection fetches each file to temporary disk in turn and
+streams them out as a zip, up to `collections.max_download_mb`
+(`COLLECTION_DOWNLOAD_MAX_MB`, default 2048).
+
 ### Security notes
 
 - Every query and download is filtered on roles computed at sign-in from
@@ -120,7 +127,8 @@ entry with `encrypt: true`. A password can't start with a space.
   groups } }`, register it in `AUTH_PROVIDERS` in `server.js`, and select it
   with `auth.provider`.
 - **Another download source:** add a module under `lib/downloaders/` that
-  streams a document id to the response, register it in `DOWNLOADERS` under
+  streams a document id to the response (and, for collection zips, has an
+  `open(id)` returning a readable stream), register it in `DOWNLOADERS` under
   its URL scheme, and configure it under `downloads`.
 
 ## AI disclosure

@@ -3,9 +3,11 @@ const session = require('express-session');
 const path = require('path');
 const { loadConfig, publicConfig, SEARCH_MODES } = require('./lib/config');
 const { createLdapAuth } = require('./lib/auth/ldap');
-const { createSmbDownloader } = require('./lib/downloaders/smb');
+const { createSmbDownloader, contentDisposition } = require('./lib/downloaders/smb');
 const { createOpenSearchClient } = require('./lib/opensearch');
-const { openCollections } = require('./lib/collections');
+const { openCollections, MAX_ITEMS } = require('./lib/collections');
+const { parseDocDate, timelineBuckets, timelineDays } = require('./lib/timeline');
+const { streamCollectionZip, safeEntryName } = require('./lib/collection-zip');
 
 const config = loadConfig();
 const app = express();
@@ -51,6 +53,9 @@ app.use(session({
     secure: config.session.secure_cookie,
   }
 }));
+// A long selection of results can far exceed the default limit below (1,000
+// ids of up to 2,048 characters), but only from someone signed in.
+app.post(['/api/collections/:id/items/bulk', '/api/collections/:id/items/bulk-remove'], requireAuth, express.json({ limit: '3mb' }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
@@ -345,14 +350,16 @@ function resultPage(hits, start, numFound) {
   return { numFound, start, docs, highlighting };
 }
 
-app.get('/api/search', requireAuth, async (req, res) => {
+// The query for the search described by the request's parameters, shared by
+// /api/search and "add all results to a collection" so that they always
+// match the same documents. depth: how far down the results it'll be read,
+// which hybrid search has to be told.
+function buildSearchQuery(req, depth = config.vector.k) {
   const qRaw = queryParam(req, 'q').trim();
   // "quoted" search: require the exact phrase, not just all/any of its
   // words anywhere in the field.
   const phraseSearch = qRaw.length > 2 && qRaw.startsWith('"') && qRaw.endsWith('"');
   const q = phraseSearch ? qRaw.slice(1, -1).trim() : qRaw;
-  const start = parseInt(queryParam(req, 'start'), 10) || 0;
-  const rows = parseInt(queryParam(req, 'rows'), 10) || 10;
   const { filters, logic, dateFrom, dateTo } = parseFilterParams(req);
 
   // A blank q is valid: with filters set it browses just what matches them, and
@@ -370,8 +377,15 @@ app.get('/api/search', requireAuth, async (req, res) => {
   } : { match_all: {} };
   const keyword = { bool: { must: [textMatch], filter: filterBool } };
   const query = mode === 'semantic' ? semanticQuery(q, filterBool)
-    : mode === 'hybrid' ? { hybrid: { queries: [keyword, semanticQuery(q, filterBool)], pagination_depth: config.vector.k } }
+    : mode === 'hybrid' ? { hybrid: { queries: [keyword, semanticQuery(q, filterBool)], pagination_depth: depth } }
     : keyword;
+  return { query, mode, textMatch };
+}
+
+app.get('/api/search', requireAuth, async (req, res) => {
+  const start = parseInt(queryParam(req, 'start'), 10) || 0;
+  const rows = parseInt(queryParam(req, 'rows'), 10) || 10;
+  const { query, mode, textMatch } = buildSearchQuery(req);
 
   const body = {
     from: start,
@@ -468,7 +482,7 @@ async function pageOfIds(req, ids, start, rows, total) {
 
 app.get('/api/collections', requireAuth, (req, res) => {
   const doc = queryParam(req, 'doc');
-  res.json({ collections: collections.list(collectionOwner(req), doc || undefined) });
+  res.json({ collections: collections.list(collectionOwner(req), doc || undefined), max_items: MAX_ITEMS });
 });
 
 app.post('/api/collections', requireAuth, (req, res) => {
@@ -502,6 +516,96 @@ app.get('/api/collections/:id', requireAuth, async (req, res) => {
   }
 });
 
+// Ids from a request body: a non-empty list, without repeats.
+function docIdList(value) {
+  if (!Array.isArray(value) || !value.length || value.length > MAX_ITEMS) throw new BadRequest('Invalid list of documents');
+  return [...new Set(value.map(docIdParam))];
+}
+
+// Adding several documents at once, in the order given. Only what the user
+// can see now is added; the rest count as unavailable, whatever the reason.
+app.post('/api/collections/:id/items/bulk', requireAuth, async (req, res) => {
+  const owner = collectionOwner(req);
+  collections.get(owner, req.params.id);
+  const ids = docIdList((req.body || {}).ids);
+  try {
+    const visible = (await visibleHits(req, ids)).map(h => h._source[F.id]);
+    res.status(201).json({ ...collections.addItems(owner, req.params.id, visible), unavailable: ids.length - visible.length });
+  } catch (err) {
+    console.error('Add to collection error:', err.message);
+    res.status(502).json({ error: 'Could not add the documents', detail: err.message });
+  }
+});
+
+app.post('/api/collections/:id/items/bulk-remove', requireAuth, (req, res) => {
+  collections.removeItems(collectionOwner(req), req.params.id, docIdList((req.body || {}).ids));
+  res.json({ ok: true });
+});
+
+// Adding a whole search's results, best first, as far as one collection can
+// hold. Takes the same parameters as /api/search.
+app.post('/api/collections/:id/items/from-search', requireAuth, async (req, res) => {
+  const owner = collectionOwner(req);
+  collections.get(owner, req.params.id);
+  const { query } = buildSearchQuery(req, MAX_ITEMS);
+  try {
+    const data = await osSearch({ size: MAX_ITEMS, _source: [F.id], query });
+    const ids = [...new Set(data.hits.hits.map(h => h._source[F.id]))];
+    const result = collections.addItems(owner, req.params.id, ids);
+    res.status(201).json({ ...result, more: data.hits.total.value > data.hits.hits.length });
+  } catch (err) {
+    console.error('Add search results error:', err.message);
+    res.status(502).json({ error: 'Could not add the results', detail: err.message });
+  }
+});
+
+// A YYYY-MM-DD query parameter as epoch milliseconds, or null if absent.
+function dayParam(req, name) {
+  const value = queryParam(req, name);
+  if (!value) return null;
+  const ms = DATE_RE.test(value) ? Date.parse(`${value}T00:00:00Z`) : NaN;
+  if (Number.isNaN(ms)) throw new BadRequest('Invalid date parameter');
+  return ms;
+}
+
+// The collection's documents the user can see in date order, oldest first,
+// with counts per period and per day for the charts. from (inclusive) and to (exclusive)
+// zoom in: both the chart and the list cover just that range. Undated
+// documents are listed last, and only when not zoomed in.
+app.get('/api/collections/:id/timeline', requireAuth, async (req, res) => {
+  const owner = collectionOwner(req);
+  const { id, name, description } = collections.get(owner, req.params.id);
+  const ids = collections.items(owner, id);
+  const { start, rows } = pageParams(req);
+  const from = dayParam(req, 'from');
+  const to = dayParam(req, 'to');
+  const zoomed = from !== null || to !== null;
+  try {
+    const hits = await visibleHits(req, ids, { source: [F.id, F.created] });
+    const entries = hits.map(h => ({ id: h._source[F.id], time: parseDocDate(h._source[F.created]) }));
+    const undated = entries.filter(e => e.time === null).map(e => e.id);
+    const allDated = entries.filter(e => e.time !== null);
+    const dated = allDated
+      .filter(e => (from === null || e.time >= from) && (to === null || e.time < to))
+      .sort((a, b) => a.time - b.time);
+    const ordered = [...dated.map(e => e.id), ...(zoomed ? [] : undated)];
+    const page = await pageOfIds(req, ordered, start, rows, ordered.length);
+    res.json({
+      ...page,
+      ...timelineBuckets(dated.map(e => e.time)),
+      days: timelineDays(dated.map(e => e.time)),
+      // Every day with a document, zoomed in or not, for moving between periods.
+      all_days: timelineDays(allDated.map(e => e.time)).map(d => d.date),
+      collection: { id, name, description },
+      hidden: ids.length - hits.length,
+      undated: undated.length,
+    });
+  } catch (err) {
+    console.error('Timeline error:', err.message);
+    res.status(502).json({ error: 'Could not load the timeline', detail: err.message });
+  }
+});
+
 app.post('/api/collections/:id/items', requireAuth, async (req, res) => {
   const owner = collectionOwner(req);
   collections.get(owner, req.params.id);
@@ -515,6 +619,82 @@ app.post('/api/collections/:id/items', requireAuth, async (req, res) => {
 app.delete('/api/collections/:id/items', requireAuth, (req, res) => {
   collections.removeItem(collectionOwner(req), req.params.id, docIdParam(queryParam(req, 'id')));
   res.json({ ok: true });
+});
+
+// Downloading a whole collection as a zip. Each document is fetched in turn,
+// so the zip's total size isn't known up front and it can run for a while:
+// one at a time per user, and a few at a time overall, to go easy on the
+// file server and this server's temporary disk space.
+const MAX_ZIP_DOWNLOADS = 3;
+const MAX_ZIP_BYTES = config.collections.max_download_mb * 1024 * 1024;
+const zipDownloads = new Set();  // owners with one running
+
+function docDownloader(id) {
+  const scheme = (/^([a-z][a-z0-9+.-]*):\/\//i.exec(id) || [])[1];
+  return scheme && downloaders[scheme.toLowerCase()];
+}
+
+const firstValue = v => (Array.isArray(v) ? v[0] : v);
+
+// Zip timestamps run from 1980 to 2107; otherwise leave it to the zip library.
+function zipDate(value) {
+  const ms = parseDocDate(value);
+  if (ms === null) return undefined;
+  const year = new Date(ms).getUTCFullYear();
+  return year >= 1980 && year <= 2107 ? new Date(ms) : undefined;
+}
+
+// What a download of this collection would hold, among the documents this
+// user can see now. Throws if it couldn't go ahead.
+async function zipPlan(req) {
+  const owner = collectionOwner(req);
+  const collection = collections.get(owner, req.params.id);
+  const ids = collections.items(owner, collection.id);
+  const source = [F.id, F.filename, F.title, F.size, F.modified].filter(Boolean);
+  const hits = await visibleHits(req, ids, { source });
+  const files = [];
+  const linked = [];
+  let bytes = 0;
+  for (const { _source: doc } of hits) {
+    const id = doc[F.id];
+    const name = firstValue(doc[F.filename]) || id.split(/[\\/]/).pop() || firstValue(doc[F.title]);
+    if (docDownloader(id) && docDownloader(id).open) {
+      files.push({ id, name, mtime: F.modified ? zipDate(doc[F.modified]) : undefined });
+      bytes += Number(firstValue(doc[F.size])) || 0;
+    } else {
+      linked.push(`${firstValue(doc[F.title]) || name}: ${id}`);
+    }
+  }
+  const httpError = (status, message) => Object.assign(new Error(message), { status, expose: true });
+  if (!files.length) {
+    throw httpError(400, hits.length ? 'None of the documents in this collection can be downloaded as files' : 'This collection has no documents to download');
+  }
+  if (bytes > MAX_ZIP_BYTES) {
+    throw httpError(413, `This collection is about ${Math.ceil(bytes / 1024 / 1024).toLocaleString('en')} MB, over the ${config.collections.max_download_mb.toLocaleString('en')} MB limit for one download`);
+  }
+  if (zipDownloads.has(owner)) throw httpError(429, 'You already have a collection downloading. Try again when it has finished');
+  if (zipDownloads.size >= MAX_ZIP_DOWNLOADS) throw httpError(429, 'Too many collections are downloading right now. Try again shortly');
+  return { owner, collection, files, linked, bytes };
+}
+
+// Asked first, as a browser can't show a download link's error message.
+app.get('/api/collections/:id/download/summary', requireAuth, async (req, res) => {
+  const { files, linked, bytes } = await zipPlan(req);
+  res.json({ files: files.length, linked: linked.length, bytes });
+});
+
+app.get('/api/collections/:id/download', requireAuth, async (req, res) => {
+  const { owner, collection, files, linked } = await zipPlan(req);
+  zipDownloads.add(owner);
+  console.log(`Collection download: ${owner}, collection ${collection.id}, ${files.length} file(s)`);
+  try {
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', contentDisposition(`${safeEntryName(collection.name)}.zip`));
+    res.flushHeaders();
+    await streamCollectionZip({ files, linked, open: id => docDownloader(id).open(id), maxBytes: MAX_ZIP_BYTES, res });
+  } finally {
+    zipDownloads.delete(owner);
+  }
 });
 
 // "More like these": documents like the collection's, excluding its own.
@@ -741,8 +921,7 @@ app.get('/api/download', requireAuth, async (req, res) => {
     return res.status(502).json({ error: 'Permission check failed', detail: err.message });
   }
 
-  const scheme = (/^([a-z][a-z0-9+.-]*):\/\//i.exec(id) || [])[1];
-  const downloader = scheme && downloaders[scheme.toLowerCase()];
+  const downloader = docDownloader(id);
   if (!downloader) {
     return res.status(400).json({ error: `Downloads are not configured for this document type` });
   }
