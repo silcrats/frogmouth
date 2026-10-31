@@ -33,7 +33,9 @@ so it can front any index that carries per-document roles.
   meaning (using the description too). Shown on top of the results or
   docked at the left or right of wide windows. A timeline view charts a
   collection's documents by date, as shaded squares or bars; click or drag
-  the chart to zoom in. A collection's files can be downloaded as one zip.
+  the chart to zoom in. Its cards run down or across, can all be expanded, and
+  a diamond marks the focused card on the chart. A collection's files can be
+  downloaded as one zip. Search and filters work inside an open collection.
 - An evidence board for each collection: lay out its documents on a canvas
   with notes, people, places, organisations and events, frame them in groups,
   draw labelled connections, and step through time with a date-range slider.

@@ -27,8 +27,9 @@
     min-height: 100vh;
   }
 
+  /* The same width as the timeline: 1200px, plus this padding. */
   .shell {
-    max-width: 780px;
+    max-width: 1240px;
     margin: 0 auto;
     padding: 48px 20px 80px;
   }
@@ -100,6 +101,11 @@
   button:hover { background: #6fc2b2; }
   button:disabled { background: var(--border); color: var(--text-dim); cursor: default; }
 
+  #searchEverything { background: transparent; border: 1px solid var(--border); color: var(--text-dim); font-weight: 400; white-space: nowrap; }
+  #searchEverything:hover { color: var(--accent); border-color: var(--accent-dim); background: transparent; }
+  #searchEverything[hidden] { display: none; }
+  @media (max-width: 600px) { form.search-form { flex-wrap: wrap; } #searchBtn, #searchEverything { padding: 10px 16px; } }
+
   .meta-row {
     display: flex;
     align-items: center;
@@ -108,8 +114,15 @@
     font-family: var(--mono);
     font-size: 12px;
     color: var(--text-dim);
-    margin: 18px 0 20px;
+    margin: 18px 0 12px;
+    padding: 6px 0;
     min-height: 16px;
+    flex-wrap: wrap;
+    /* Stays in view, for adding what's selected from far down a list. */
+    position: sticky;
+    top: 0;
+    z-index: 15;
+    background: var(--bg);
   }
 
   .page-size-control {
@@ -324,6 +337,11 @@
     margin-top: 28px;
   }
 
+  .pager { align-items: center; }
+  .pager .pager-info { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+  /* Above a sideways row, so that it doesn't read as moving along the cards. */
+  .pager.above-cards { margin: 0 0 12px; }
+
   .app-version {
     margin-top: 40px;
     text-align: center;
@@ -350,6 +368,7 @@
   }
 
   .filters.hidden { display: none; }
+  .filters:empty, #filterRows:empty { display: none; }
 
   #filterRows {
     display: flex;
@@ -359,16 +378,12 @@
     width: 100%;
   }
 
-  .filter-controls-row {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    flex: 1 1 100%;
-    width: 100%;
-  }
+  .search-options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; margin-bottom: 10px; }
+  .filters-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 12px; }
 
   .filter-row {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
     align-items: flex-end;
   }
@@ -420,7 +435,7 @@
     font-family: var(--mono);
   }
 
-  .add-row-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
+  .add-row-btn:hover { color: var(--accent); border-color: var(--accent-dim); background: transparent; }
 
   .logic-toggle {
     display: flex;
@@ -455,31 +470,18 @@
     font-weight: 700;
   }
 
-  .date-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .filter-field {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .filter-field label {
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-  }
-
   date-select { display: inline-flex; gap: 4px; }
   date-select input[type="number"] { width: 5.5em; min-width: 0; }
-  .filter-field { max-width: 100%; }
-  .date-row { align-items: center; }
   .date-sep { color: var(--text-dim); }
+  .filter-date-range { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .filter-date-range date-select { max-width: 100%; min-width: 0; }
+  .filter-date-range date-select select, .filter-date-range date-select input { min-width: 0; }
+  @media (max-width: 600px) {
+    .filter-row .filter-value-wrap { flex: 1 1 100%; order: 3; }
+    .filter-date-range date-select { display: flex; flex: 1 1 100%; }
+    .filter-date-range date-select select, .filter-date-range date-select input { flex: 1 1 0; width: 0; }
+    .filter-date-range .date-sep { display: none; }
+  }
   .filters date-select select, .filters date-select input { padding: 8px 6px; }
 
   .filters select,
@@ -506,13 +508,12 @@
     border: none;
     font-size: 12px;
     padding: 4px 0;
-    margin-bottom: 14px;
     cursor: pointer;
     text-align: left;
     font-family: var(--mono);
   }
 
-  .filter-toggle:hover { color: var(--accent); }
+  .filter-toggle:hover { color: var(--accent); background: transparent; }
 
   .filter-toggle .count {
     display: inline-block;
@@ -533,10 +534,10 @@
     padding: 8px 12px;
     border-radius: 6px;
     cursor: pointer;
-    align-self: flex-end;
+    margin-left: auto;  /* at the far end, away from adding a filter */
   }
 
-  .clear-filters:hover { color: var(--text); border-color: var(--accent-dim); }
+  .clear-filters:hover { color: var(--text); border-color: var(--accent-dim); background: transparent; }
 
   .status-dot {
     display: inline-block;
@@ -594,8 +595,12 @@
     text-transform: uppercase; color: var(--text-dim);
   }
   .dock-switch { display: flex; gap: 4px; }
-  .collections-panel .dock-switch button, .collections-panel .panel-close { padding: 2px 7px; }
-  .dock-switch button.active { color: var(--accent); border-color: var(--accent-dim); }
+  .collections-panel .dock-switch button, .collections-panel .panel-close {
+    padding: 2px 7px; background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+    font-family: var(--mono); font-size: 11px; font-weight: 400;
+  }
+  .collections-panel .dock-switch button:hover, .collections-panel .panel-close:hover { background: transparent; color: var(--accent); border-color: var(--accent-dim); }
+  .collections-panel .dock-switch button.active { color: var(--accent); border-color: var(--accent); font-weight: 600; }
   .collection-row.current .collection-open { color: var(--accent); font-weight: 600; }
   .collections-panel input[type="text"], .collect-menu input[type="text"], .collections-panel textarea {
     font-size: 13px; padding: 7px 10px;
@@ -623,17 +628,74 @@
   .collection-banner .banner-desc {
     flex: 1 1 100%; order: 3; color: var(--text-dim); font-size: 12.5px; white-space: pre-line;
   }
-  /* Wider than the results column when the window has room, for a year of
-     squares, and still centred on it. --page-width leaves out a docked panel. */
-  body { --page-width: 100vw; }
+  /* --page-width leaves out a docked panel. */
+  body { --page-width: 100vw; --timeline-width: min(1200px, calc(var(--page-width) - 40px)); }
   .timeline {
-    --timeline-width: min(1200px, calc(var(--page-width) - 40px));
     position: relative; width: var(--timeline-width); max-width: var(--timeline-width);
-    left: min(0px, calc((100% - var(--timeline-width)) / 2));
+    margin-left: min(0px, calc((100% - var(--timeline-width)) / 2));
     background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
     padding: 12px 14px; margin-bottom: 14px;
   }
   .timeline[hidden] { display: none; }
+  /* Vertical cards scroll past the chart, so it stays in view to show the diamond,
+     where the window has the room. */
+  @media (min-height: 700px) {
+    body.timeline-tracking .timeline { position: sticky; top: 0; z-index: 12; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35); }
+    body.timeline-tracking .timeline-scroll { max-height: 26vh; margin: 8px 0; }
+    body.timeline-tracking .meta-row { position: static; }
+  }
+  .timeline-focus {
+    font-size: 12px; color: var(--text-dim); min-height: 18px; margin-top: 6px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .timeline-focus strong { color: var(--text); font-weight: 600; }
+  .timeline-diamond {
+    position: absolute; left: 0; top: 0; width: 14px; height: 14px; margin: -7px 0 0 -7px; z-index: 3; pointer-events: none;
+    background: #f2c14e; border: 2px solid #14161a; box-shadow: 0 0 0 1px #f2c14e; transform: rotate(45deg);
+    transition: left 0.15s ease, top 0.15s ease;
+  }
+  @media (prefers-reduced-motion: reduce) { .timeline-diamond { transition: none; } }
+  .timeline.diamond-near .timeline-squares, .timeline.diamond-near .timeline-bars { cursor: grab; }
+  .timeline.diamond-near .timeline-squares *, .timeline.diamond-near .timeline-bars * { cursor: grab; }
+  .timeline.diamond-dragging, .timeline.diamond-dragging * { cursor: grabbing !important; user-select: none; }
+  .timeline.diamond-dragging .timeline-diamond { transition: none; transform: rotate(45deg) scale(1.25); }
+  .result.focused { border-color: #f2c14e; }
+  .results.cards-horizontal {
+    flex-direction: row; align-items: flex-start; gap: 12px; overflow-x: auto; padding: 2px 0 12px;
+    overflow-anchor: none;  /* text arriving in a card mustn't shift the page */
+    /* Room at each end, so that the first and last cards can reach the middle and
+       take the focus. On the cards as well: a flex row drops its end padding. */
+    width: var(--timeline-width); max-width: var(--timeline-width);
+    margin-left: min(0px, calc((100% - var(--timeline-width)) / 2));
+  }
+  .results.cards-horizontal .result {
+    flex: 0 0 min(460px, 85vw); margin: 0; min-width: 0;
+  }
+  .results.cards-horizontal .result.open { flex-basis: min(680px, 90vw); }
+  .results.cards-horizontal .result:first-child { margin-left: max(0px, calc(50% - min(230px, 42.5vw))); }
+  .results.cards-horizontal .result:last-child { margin-right: max(0px, calc(50% - min(230px, 42.5vw))); }
+  .results.cards-horizontal .result.open:first-child { margin-left: max(0px, calc(50% - min(340px, 45vw))); }
+  .results.cards-horizontal .result.open:last-child { margin-right: max(0px, calc(50% - min(340px, 45vw))); }
+  .results.cards-horizontal .result-header { flex-wrap: wrap; }
+  .results.cards-horizontal .result:not(.focused) { cursor: pointer; }
+  .results.cards-horizontal.grabbing, .results.cards-horizontal.grabbing * { cursor: grabbing !important; user-select: none; }
+  .results.cards-horizontal .result:not(.focused):hover { border-color: var(--accent-dim); }
+  /* Over each end of the row, near the top so that they stay in view when cards
+     are expanded. No height of its own, so the row sits where it would anyway. */
+  .cards-nav {
+    position: relative; height: 0; z-index: 5; width: var(--timeline-width); max-width: var(--timeline-width);
+    margin-left: min(0px, calc((100% - var(--timeline-width)) / 2));
+  }
+  .cards-nav[hidden] { display: none; }
+  .cards-nav button {
+    position: absolute; top: 56px; width: 48px; height: 48px; padding: 0 0 4px; border-radius: 50%;
+    font-size: 30px; line-height: 1; font-weight: 400; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  }
+  .cards-nav button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+  .cards-nav button:disabled { opacity: 0.35; box-shadow: none; }
+  .cards-nav .timeline-card-prev { left: 8px; }
+  .cards-nav .timeline-card-next { right: 8px; }
+  .results.cards-horizontal .collect-menu { position: fixed; right: auto; top: auto; }
   .timeline-head {
     display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px;
     font-family: var(--mono); font-size: 11px; color: var(--text-dim); min-height: 24px; margin-bottom: 8px;
@@ -666,6 +728,8 @@
   .timeline-hint { margin-top: 6px; font-size: 12px; color: var(--text-dim); }
   .timeline-actions { display: flex; gap: 6px; }
   .timeline-head button.active { color: var(--accent); border-color: var(--accent-dim); }
+  .timeline-actions { flex-wrap: wrap; }
+  .timeline-actions .timeline-divider { width: 1px; background: var(--border); margin: 0 2px; }
   .timeline-scroll { overflow: auto; max-height: 420px; margin: 16px 0; }
   .timeline-squares {
     --square: 14px; display: grid; gap: 2px; width: max-content; user-select: none;
@@ -720,13 +784,11 @@
   .timeline-legend .timeline-square:first-of-type { margin-left: 3px; }
   .timeline-legend .timeline-square:last-of-type { margin-right: 3px; }
   .select-bar {
-    position: sticky; top: 0; z-index: 15; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
-    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-    padding: 8px 12px; margin-bottom: 12px; font-size: 12.5px; color: var(--text-dim);
+    flex: 1 1 280px; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 8px;
+    font-size: 12.5px; color: var(--text-dim);
   }
   .select-bar[hidden] { display: none; }
-  .select-bar.has-selection { border-color: var(--accent-dim); }
-  .select-bar .select-count { font-family: var(--mono); font-size: 11.5px; margin-right: auto; }
+  .select-bar .select-count { font-family: var(--mono); font-size: 11.5px; }
   .select-bar.has-selection .select-count { color: var(--accent); }
   .select-bar button {
     background: transparent; border: 1px solid var(--border); color: var(--text-dim);
@@ -801,50 +863,45 @@
     <form class="search-form" id="searchForm">
       <input type="text" id="queryInput" placeholder="Search…" autocomplete="off" autofocus>
       <button type="submit" id="searchBtn">Search</button>
+      <button type="button" id="searchEverything" hidden title="Leave this collection and run this search across everything">Search everything</button>
     </form>
 
-    <div class="logic-toggle" id="scopeToggle" style="margin-bottom:10px;">
-      Search in:
-      <div class="switch">
-        <button type="button" data-scope="" class="active">All</button>
-        <!-- one button per configured source, added from /api/config -->
-      </div>
-    </div>
-
-    <div class="logic-toggle" id="modeToggle" style="margin-bottom:10px; display:none;">
-      Mode:
-      <div class="switch">
-        <button type="button" data-mode="keyword" title="Documents containing the words searched for">Keyword</button>
-        <button type="button" data-mode="semantic" title="Documents closest in meaning, whether or not they use the same words">Semantic</button>
-        <button type="button" data-mode="hybrid" title="Both, ranked together">Hybrid</button>
-      </div>
-    </div>
-
-    <button type="button" class="filter-toggle" id="filterToggle">
-      &darr; Filters <span class="count" id="filterCount" style="display:none;"></span>
-    </button>
-
-    <div class="filters hidden" id="filters">
-      <div id="filterRows"></div>
-      <div class="filter-controls-row">
-        <button type="button" class="add-row-btn" id="addFilterRow">+ Add filter</button>
-        <div class="logic-toggle" id="logicToggle" style="display:none;">
-          Match:
-          <div class="switch">
-            <button type="button" id="logicAndBtn" class="active">ALL (AND)</button>
-            <button type="button" id="logicOrBtn">ANY (OR)</button>
-          </div>
+    <div class="search-options">
+      <div class="logic-toggle" id="scopeToggle">
+        Search in:
+        <div class="switch">
+          <button type="button" data-scope="" class="active">All</button>
+          <!-- one button per configured source, added from /api/config -->
         </div>
       </div>
-      <div class="filter-field">
-        <label>Date range</label>
-        <div class="date-row">
-          <date-select id="dateFromFilter" aria-label="On or after" title="On or after"></date-select>
-          <span class="date-sep" aria-hidden="true">&ndash;</span>
-          <date-select id="dateToFilter" aria-label="On or before" title="On or before"></date-select>
+
+      <div class="logic-toggle" id="modeToggle" style="display:none;">
+        Mode:
+        <div class="switch">
+          <button type="button" data-mode="keyword" title="Documents containing the words searched for">Keyword</button>
+          <button type="button" data-mode="semantic" title="Documents closest in meaning, whether or not they use the same words">Semantic</button>
+          <button type="button" data-mode="hybrid" title="Both, ranked together">Hybrid</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="filters-bar">
+      <button type="button" class="filter-toggle" id="filterToggle">
+        &darr; Filters <span class="count" id="filterCount" style="display:none;"></span>
+      </button>
+      <button type="button" class="add-row-btn" id="addFilterRow">+ Add filter</button>
+      <div class="logic-toggle" id="logicToggle" style="display:none;">
+        Match:
+        <div class="switch">
+          <button type="button" id="logicAndBtn" class="active">ALL (AND)</button>
+          <button type="button" id="logicOrBtn">ANY (OR)</button>
         </div>
       </div>
       <button type="button" class="clear-filters" id="clearFilters">Clear all filters</button>
+    </div>
+
+    <div class="filters hidden" id="filters">
+      <div id="filterRows"></div>
     </div>
 
     <div class="collection-banner" id="collectionBanner" hidden></div>
@@ -852,6 +909,14 @@
 
     <div class="meta-row">
       <span id="metaRow"></span>
+      <div class="select-bar" id="selectBar" hidden>
+        <span class="select-count" id="selectCount" aria-live="polite"></span>
+        <button type="button" id="selectPage">Select page</button>
+        <button type="button" id="selectClear">Clear</button>
+        <div class="collect-wrap"><button type="button" class="select-add" id="selectAdd">Add selected to collection</button></div>
+        <div class="collect-wrap"><button type="button" id="selectAddAll"></button></div>
+        <div class="select-message" id="selectMessage" hidden></div>
+      </div>
       <div class="page-size-control">
         <label for="pageSizeSelect">Show</label>
         <select id="pageSizeSelect">
@@ -859,19 +924,17 @@
           <option value="25">25</option>
           <option value="50">50</option>
           <option value="100">100</option>
+          <option value="250">250</option>
+          <option value="500">500</option>
+          <option value="1000">1000</option>
         </select>
       </div>
     </div>
 
-    <div class="select-bar" id="selectBar" hidden>
-      <span class="select-count" id="selectCount" aria-live="polite"></span>
-      <button type="button" id="selectPage">Select page</button>
-      <button type="button" id="selectClear">Clear</button>
-      <div class="collect-wrap"><button type="button" class="select-add" id="selectAdd">Add selected to collection</button></div>
-      <div class="collect-wrap"><button type="button" id="selectAddAll"></button></div>
-      <div class="select-message" id="selectMessage" hidden></div>
+    <div class="cards-nav" id="cardsNav" hidden>
+      <button type="button" class="timeline-card-prev" id="cardPrev" title="Move to the previous card" aria-label="Previous card">&lsaquo;</button>
+      <button type="button" class="timeline-card-next" id="cardNext" title="Move to the next card" aria-label="Next card">&rsaquo;</button>
     </div>
-
     <div class="results" id="results">
       <div class="empty-state">
         <div class="big">// ready</div>
@@ -880,8 +943,9 @@
     </div>
 
     <div class="pager" id="pager" style="display:none;">
-      <button id="prevBtn">&larr; Previous</button>
-      <button id="nextBtn">Next &rarr;</button>
+      <button id="prevBtn">&larr; Previous page</button>
+      <span class="pager-info" id="pagerInfo"></span>
+      <button id="nextBtn">Next page &rarr;</button>
     </div>
 
     <footer class="app-version" id="appVersion"></footer>
@@ -1019,14 +1083,13 @@
   const logicToggle = document.getElementById('logicToggle');
   const logicAndBtn = document.getElementById('logicAndBtn');
   const logicOrBtn = document.getElementById('logicOrBtn');
-  const dateFromFilter = document.getElementById('dateFromFilter');
-  const dateToFilter = document.getElementById('dateToFilter');
   const clearFiltersBtn = document.getElementById('clearFilters');
 
   // Everything below that depends on the index layout -- filter list, source
   // scopes, type groups -- is filled in from /api/config (config.yaml) by
   // applyConfig() before anything else runs.
   let CONFIG = { app: {}, sources: [], filters: [], types: { groups: [], aliases: {} } };
+  const DATE_RANGE_FILTER = 'date_range';  // built in, like type and share; value "from..to"
   let FIELD_LABELS = {};        // filter key -> label
   let FILTER_PLACEHOLDERS = {}; // filter key -> placeholder for free-text filters
   let SOURCES_BY_HOST = {};     // doc.source value -> source config
@@ -1062,7 +1125,7 @@
     renderFilterRows();
     updateFilterCount();
     loadFacets();
-    if (hasSearched) runSearch(currentQuery, 0);
+    searchAgain();
   });
 
   // Search mode: keyword unless the server offers vector search (cfg.search_modes).
@@ -1077,13 +1140,12 @@
     const btn = e.target.closest('button[data-mode]');
     if (!btn || btn.dataset.mode === searchMode) return;
     setSearchMode(btn.dataset.mode);
-    if (hasSearched) runSearch(currentQuery, 0);
+    searchAgain();
   });
 
   function activeFilterCount() {
     const rowCount = filterRows.filter(r => r.value.trim()).length;
-    const dateCount = [dateFromFilter.value, dateToFilter.value].filter(Boolean).length;
-    return rowCount + dateCount;
+    return rowCount;
   }
 
   // Tracks the Source-filter count across calls so the AND->OR nudge below
@@ -1151,7 +1213,38 @@
     },
   };
 
+  // Kept with its row, so that redrawing the rows doesn't lose a half-entered date.
+  function buildDateRange(row) {
+    if (row.dateRange) return row.dateRange;
+    const [from = '', to = ''] = row.value.split('..');
+    const wrap = document.createElement('div');
+    wrap.className = 'filter-date-range';
+    const end = (label, value) => {
+      const field = document.createElement('date-select');
+      field.setAttribute('aria-label', label);
+      field.title = label;
+      field.value = value;
+      return field;
+    };
+    const fromField = end('From', from);
+    const toField = end('To', to);
+    const dash = document.createElement('span');
+    dash.className = 'date-sep';
+    dash.textContent = '–';
+    dash.setAttribute('aria-hidden', 'true');
+    wrap.append(fromField, dash, toField);
+    wrap.addEventListener('change', () => {
+      row.value = fromField.value || toField.value ? `${fromField.value}..${toField.value}` : '';
+      updateFilterCount();
+      loadFacets();
+      searchAgain();
+    });
+    row.dateRange = wrap;
+    return wrap;
+  }
+
   function buildValueInput(row) {
+    if (row.field === DATE_RANGE_FILTER) return buildDateRange(row);
     const dropdown = DROPDOWN_FIELDS[row.field];
     if (dropdown) {
       const select = document.createElement('select');
@@ -1164,7 +1257,7 @@
         row.value = select.value;
         updateFilterCount();
         loadFacets();
-        if (hasSearched) runSearch(currentQuery, 0);
+        searchAgain();
       });
       return select;
     }
@@ -1180,7 +1273,7 @@
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         loadFacets();
-        if (hasSearched) runSearch(currentQuery, 0);
+        searchAgain();
       }, 400);
     });
     return input;
@@ -1198,11 +1291,14 @@
         .map(([val, label]) => `<option value="${val}" ${row.field === val ? 'selected' : ''}>${label}</option>`)
         .join('');
       fieldSelect.addEventListener('change', () => {
+        // A date range's value means nothing to another filter, or the reverse.
+        if (row.field === DATE_RANGE_FILTER || fieldSelect.value === DATE_RANGE_FILTER) row.value = '';
+        row.dateRange = null;
         row.field = fieldSelect.value;
         renderFilterRows();
         updateFilterCount();
         loadFacets();
-        if (hasSearched) runSearch(currentQuery, 0);
+        searchAgain();
       });
 
       const notSelect = document.createElement('select');
@@ -1213,7 +1309,7 @@
         row.not = notSelect.value === 'not';
         updateFilterCount();
         loadFacets();
-        if (hasSearched) runSearch(currentQuery, 0);
+        searchAgain();
       });
 
       const valueWrap = document.createElement('div');
@@ -1229,7 +1325,7 @@
         renderFilterRows();
         updateFilterCount();
         loadFacets();
-        if (hasSearched) runSearch(currentQuery, 0);
+        searchAgain();
       });
 
       rowEl.appendChild(fieldSelect);
@@ -1244,6 +1340,7 @@
     const firstField = Object.keys(FIELD_LABELS)[0];
     if (!firstField) return;
     filterRows.push({ id: ++rowIdCounter, field: firstField, value: '', not: false });
+    filtersPanel.classList.remove('hidden');  // it may be closed, with this outside it
     renderFilterRows();
     updateFilterCount();
   });
@@ -1257,7 +1354,7 @@
     logicAndBtn.classList.add('active');
     logicOrBtn.classList.remove('active');
     loadFacets();
-    if (hasSearched) runSearch(currentQuery, 0);
+    searchAgain();
   });
 
   logicOrBtn.addEventListener('click', () => {
@@ -1265,7 +1362,7 @@
     logicOrBtn.classList.add('active');
     logicAndBtn.classList.remove('active');
     loadFacets();
-    if (hasSearched) runSearch(currentQuery, 0);
+    searchAgain();
   });
 
   clearFiltersBtn.addEventListener('click', () => {
@@ -1273,20 +1370,10 @@
     filterLogic = 'AND';
     logicAndBtn.classList.add('active');
     logicOrBtn.classList.remove('active');
-    dateFromFilter.value = '';
-    dateToFilter.value = '';
     renderFilterRows();
     updateFilterCount();
     loadFacets();
-    if (hasSearched) runSearch(currentQuery, 0);
-  });
-
-  [dateFromFilter, dateToFilter].forEach(el => {
-    el.addEventListener('change', () => {
-      updateFilterCount();
-      loadFacets();
-      if (hasSearched) runSearch(currentQuery, 0);
-    });
+    searchAgain();
   });
 
   // Populate the file-type dropdown from whatever mimetypes actually exist
@@ -1311,7 +1398,8 @@
       // re-renders the rows.
       const active = document.activeElement;
       const isTypingFreeText = active && active.tagName === 'INPUT' && active.classList.contains('filter-value');
-      if (!isTypingFreeText) renderFilterRows();
+      const isEnteringDate = active && active.closest && active.closest('date-select');
+      if (!isTypingFreeText && !isEnteringDate) renderFilterRows();
     } catch (err) {
       console.warn('Could not load type/share filters:', err);
     }
@@ -1354,6 +1442,7 @@
       FIELD_LABELS[f.key] = f.label || f.key;
       if (f.placeholder) FILTER_PLACEHOLDERS[f.key] = f.placeholder;
     });
+    FIELD_LABELS[DATE_RANGE_FILTER] = 'Date range';
 
     const types = cfg.types || {};
     VALUE_LABELS = {};
@@ -1623,6 +1712,10 @@
         </div>
       `;
 
+      const when = new Date(firstOf(doc.created));
+      if (!isNaN(when)) div.dataset.day = when.toISOString().slice(0, 10);
+      div.dataset.title = title;
+
       const check = div.querySelector('.result-check');
       check.dataset.id = doc.id;
       check.checked = selectedDocs.has(doc.id);
@@ -1638,15 +1731,21 @@
       const expandBtn = div.querySelector('.expand-btn');
       const expandLabel = div.querySelector('.expand-label');
       let textRequested = false;
-      expandBtn.addEventListener('click', async () => {
-        const isOpen = div.classList.toggle('open');
+      div.loadText = async () => {
+        if (textRequested) return;
+        textRequested = true;
+        // Allow another try on the next expand if this one fails.
+        textRequested = await loadFullText(doc.id, div.querySelector('.detail-body'));
+      };
+      div.setOpen = isOpen => {
+        div.classList.toggle('open', isOpen);
         div.querySelector('.result-detail').style.display = isOpen ? 'block' : 'none';
         expandLabel.textContent = isOpen ? 'Collapse' : 'Expand';
-        if (isOpen && !textRequested) {
-          textRequested = true;
-          // Allow another try on the next expand if this one fails.
-          textRequested = await loadFullText(doc.id, div.querySelector('.detail-body'));
-        }
+      };
+      expandBtn.addEventListener('click', () => {
+        const isOpen = !div.classList.contains('open');
+        div.setOpen(isOpen);
+        if (isOpen) div.loadText();
       });
 
       resultsEl.appendChild(div);
@@ -1657,6 +1756,7 @@
     pager.style.display = data.numFound > ROWS_PER_PAGE ? 'flex' : 'none';
     prevBtn.disabled = currentStart === 0;
     nextBtn.disabled = currentStart + ROWS_PER_PAGE >= data.numFound;
+    document.getElementById('pagerInfo').textContent = `Page ${Math.floor(currentStart / ROWS_PER_PAGE) + 1} of ${Math.ceil(data.numFound / ROWS_PER_PAGE)}`;
   }
 
   // Shared by runSearch and loadFacets, so the Type dropdown's counts are
@@ -1664,14 +1764,13 @@
   // search would actually use.
   function currentFilterParams() {
     const params = new URLSearchParams();
+    if (openCollection) params.set('collection', openCollection.id);
     const activeRows = filterRows.filter(r => r.value.trim());
     if (activeRows.length) {
       params.set('filters', JSON.stringify(activeRows.map(r => ({ field: r.field, value: r.value.trim(), ...(r.not && { not: true }) }))));
       params.set('logic', filterLogic);
     }
     if (searchScope) params.set('scope', searchScope);
-    if (dateFromFilter.value) params.set('dateFrom', dateFromFilter.value);
-    if (dateToFilter.value) params.set('dateTo', dateToFilter.value);
     return params;
   }
 
@@ -1725,8 +1824,68 @@
     // A blank query is valid: with filters set this browses just what matches
     // them, and with none set it lists everything the signed-in user can see --
     // leave Search blank and let the filters do the work.
+    if (openCollection) {
+      currentQuery = input.value.trim();
+      searchAgain();
+    } else {
+      runSearch(input.value.trim(), 0);
+    }
+  });
+
+  document.getElementById('searchEverything').addEventListener('click', () => {
+    mainSearch = null;  // what's typed now takes its place
     runSearch(input.value.trim(), 0);
   });
+
+  // After the search box or a filter changes: within the open collection, if there
+  // is one, and otherwise the search, once there's been one.
+  function searchAgain() {
+    if (!openCollection) {
+      if (hasSearched) runSearch(currentQuery, 0);
+      return;
+    }
+    currentQuery = input.value.trim();
+    if (collectionView === 'timeline') {
+      resetTimelineZoom();
+      showTimeline(0);
+    } else {
+      showCollection(openCollection, 0);
+    }
+  }
+
+  // The main search, set aside while a collection has the search box and filters.
+  let mainSearch = null;
+
+  function setSearchInputs({ query, rows, logic, scope, mode }) {
+    setSearchMode(mode);
+    input.value = query;
+    currentQuery = query;
+    filterRows = rows;
+    filterLogic = logic;
+    logicAndBtn.classList.toggle('active', logic === 'AND');
+    logicOrBtn.classList.toggle('active', logic === 'OR');
+    searchScope = scope;
+    scopeSwitch.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.scope === scope));
+    renderFilterRows();
+    updateFilterCount();
+  }
+
+  // Keyword, as semantic matches take in nearly everything, and wouldn't narrow it.
+  const emptySearch = () => ({ query: '', rows: [], logic: 'AND', scope: '', mode: 'keyword' });
+
+  function collectionSearchActive() {
+    return Boolean(input.value.trim() || filterRows.some(r => r.value.trim()) || searchScope);
+  }
+
+  // What the collection's views add to their requests. The search box's own text,
+  // not currentQuery, as a filter can change before Search has been pressed.
+  function collectionSearchParams() {
+    const params = currentFilterParams();
+    params.delete('collection');
+    if (input.value.trim()) params.set('q', input.value.trim());
+    if (searchMode !== 'keyword') params.set('mode', searchMode);
+    return params;
+  }
 
   prevBtn.addEventListener('click', () => {
     if (currentStart > 0) loadPage(Math.max(0, currentStart - ROWS_PER_PAGE));
@@ -1933,12 +2092,21 @@
   }
   document.addEventListener('click', e => { if (!e.target.closest('.collect-wrap')) closeCollectMenus(); });
 
+  // The sideways row clips anything poking out of it, so there the menu goes over it.
+  function placeCollectMenu(wrap, menu) {
+    if (!wrap.closest('.cards-horizontal')) return;
+    const r = wrap.getBoundingClientRect();
+    menu.style.left = `${Math.max(8, Math.min(r.right - 240, window.innerWidth - 248))}px`;
+    menu.style.top = `${r.bottom + 4}px`;
+  }
+
   async function openCollectMenu(wrap, docId) {
     closeCollectMenus();
     const menu = document.createElement('div');
     menu.className = 'collect-menu';
     menu.innerHTML = '<em>Loading…</em>';
     wrap.appendChild(menu);
+    placeCollectMenu(wrap, menu);
     // A view of this collection changes when its items do.
     const changed = id => {
       if (openCollection && openCollection.id === id) loadPage(currentStart);
@@ -2017,7 +2185,7 @@
     selectAddBtn.hidden = !n;
     // Only a search has a set of results to add: a collection's documents are
     // already in one, and "more like these" isn't a search that can be re-run.
-    const canAddAll = !openCollection && hasSearched && currentTotal > 0;
+    const canAddAll = (openCollection ? collectionView === 'items' && collectionSearchActive() : hasSearched) && currentTotal > 0;
     selectAddAllBtn.hidden = !canAddAll;
     if (canAddAll) selectAddAllBtn.textContent = `Add all ${currentTotal.toLocaleString()} results`;
   }
@@ -2159,14 +2327,17 @@
   // A collection, or documents like it, in the results list.
   function renderBanner() {
     collectionBanner.hidden = false;
+    input.placeholder = `Search in ${openCollection.name}…`;
+    document.getElementById('searchEverything').hidden = false;
     timelineEl.hidden = collectionView !== 'timeline';
+    applyTimelineCards();
     const views = [['items', 'Items'], ['timeline', 'Timeline'],
                    ...(semanticAvailable ? [['semantic', 'More like these: semantic']] : []),
                    ['keyword', 'More like these: keyword']];
     collectionBanner.innerHTML = `<span class="banner-title">Collection: <strong>${escapeHtml(openCollection.name)}</strong></span>
       <div class="banner-views">${views.map(([v, label]) =>
-        `<button type="button" data-view="${v}" class="${v === collectionView ? 'active' : ''}">${label}</button>`).join('')}</div>
-      <button type="button" class="banner-board" title="Arrange this collection's documents on a board, with notes, groups, connections and a timeline">Board</button>
+        `<button type="button" data-view="${v}" class="${v === collectionView ? 'active' : ''}">${label}</button>`
+        + (v === 'timeline' ? `<button type="button" class="banner-board" title="Arrange this collection's documents on a board, with notes, groups, connections and a timeline">Board</button>` : '')).join('')}</div>
       <button type="button" class="banner-download" title="Download this collection's files as one zip">&#8595; Download all</button>
       <button type="button" class="banner-back">Back to search</button>
       ${openCollection.description ? `<div class="banner-desc">${escapeHtml(openCollection.description)}</div>` : ''}`;
@@ -2208,11 +2379,16 @@
     }
   }
 
+  let viewRequest = 0;
+
   async function showView(url, start, describe, emptyHtml) {
     currentStart = start;
     metaRow.textContent = 'Loading…';
+    // Typing or changing filters quickly: only the latest request's answer counts.
+    const request = ++viewRequest;
     try {
       const data = await collectionsApi('GET', `${url}${url.includes('?') ? '&' : '?'}start=${start}&rows=${ROWS_PER_PAGE}`);
+      if (request !== viewRequest) return;
       currentTotal = data.numFound;
       // Picks up a name or description changed elsewhere (another tab).
       if (data.collection && openCollection && data.collection.id === openCollection.id
@@ -2224,6 +2400,7 @@
       metaRow.innerHTML = `<span class="status-dot ok"></span>${describe(data)}${shown}`;
       renderResults(data, emptyHtml);
     } catch (err) {
+      if (request !== viewRequest) return;
       metaRow.innerHTML = `<span class="status-dot err"></span>${escapeHtml(err.message)}`;
       resultsEl.innerHTML = '';
       pager.style.display = 'none';
@@ -2233,11 +2410,27 @@
 
   function showCollection(c, start) {
     const switched = !openCollection || openCollection.id !== c.id;
+    if (!openCollection) {
+      mainSearch = { query: input.value, rows: filterRows, logic: filterLogic, scope: searchScope, mode: searchMode };
+    }
+    if (switched) setSearchInputs(emptySearch());
     openCollection = c;
     collectionView = 'items';
     renderBanner();
-    if (switched) refreshPanelIfOpen();
+    if (switched) {
+      refreshPanelIfOpen();
+      loadFacets();
+    }
     loadPage = s => showCollection(openCollection, s);
+    if (collectionSearchActive()) {
+      const params = currentFilterParams();
+      if (input.value.trim()) params.set('q', input.value.trim());
+      if (searchMode !== 'keyword') params.set('mode', searchMode);
+      return showView(`/api/search?${params}`, start, data => {
+        const n = data.numFound;
+        return `${n.toLocaleString()} match${n === 1 ? '' : 'es'} in this collection`;
+      }, '<div class="empty-state"><div class="big">// no matches</div>Nothing in this collection matches. Try different words or filters, or choose "Search everything".</div>');
+    }
     return showView(`/api/collections/${c.id}`, start, data => {
       const n = data.numFound;
       return `${n.toLocaleString()} document${n === 1 ? '' : 's'}`
@@ -2254,15 +2447,384 @@
     collectionView = 'timeline';
     renderBanner();
     loadPage = showTimeline;
-    const range = timelineRange ? `?from=${timelineRange.from}&to=${timelineRange.to}` : '';
-    return showView(`/api/collections/${openCollection.id}/timeline${range}`, start, data => {
+    const params = collectionSearchParams();
+    if (timelineRange) {
+      params.set('from', timelineRange.from);
+      params.set('to', timelineRange.to);
+    }
+    const searching = collectionSearchActive();
+    return showView(`/api/collections/${openCollection.id}/timeline?${params}`, start, data => {
       if (collectionView === 'timeline') renderTimeline(data);
       const n = data.numFound;
+      if (searching) return `${n.toLocaleString()} match${n === 1 ? '' : 'es'} in this collection, oldest first`;
       return `${n.toLocaleString()} document${n === 1 ? '' : 's'}, oldest first`
         + (data.hidden ? ` (${data.hidden} more you can no longer see)` : '');
-    }, timelineRange
+    }, searching && !timelineRange
+      ? '<div class="empty-state"><div class="big">// no matches</div>Nothing in this collection matches. Try different words or filters, or choose "Search everything".</div>'
+      : timelineRange
       ? '<div class="empty-state"><div class="big">// nothing in this period</div>Choose "Back" or "Reset View" to see more of the timeline.</div>'
-      : '<div class="empty-state"><div class="big">// empty collection</div>Add results to it with "+ Collection" on any result.</div>');
+      : '<div class="empty-state"><div class="big">// empty collection</div>Add results to it with "+ Collection" on any result.</div>').then(applyTimelineCards);
+  }
+
+  // The timeline's cards: their direction, whether they're all open, and which one
+  // is in focus, which the diamond marks on the chart.
+  const TIMELINE_CARDS_KEY = 'frogmouth.timelineCards';
+  const TIMELINE_EXPAND_KEY = 'frogmouth.timelineExpand';
+  let timelineCardsWay = loadPref(TIMELINE_CARDS_KEY) === 'horizontal' ? 'horizontal' : 'vertical';
+  let timelineExpanded = loadPref(TIMELINE_EXPAND_KEY) === '1';
+  let focusedCard = null;
+  let cardTextObserver = null;
+  let focusQueued = false;
+  const timelineCards = () => [...resultsEl.querySelectorAll('.result')];
+  const cardsNav = document.getElementById('cardsNav');
+  const cardPrev = document.getElementById('cardPrev');
+  const cardNext = document.getElementById('cardNext');
+  cardPrev.addEventListener('click', () => stepFocusedCard(-1));
+  cardNext.addEventListener('click', () => stepFocusedCard(1));
+
+  // Runs whenever cards are drawn or a setting changes, in any view: outside the
+  // timeline, it puts everything back as the other views expect.
+  function applyTimelineCards() {
+    const active = collectionView === 'timeline';
+    const horizontal = active && timelineCardsWay === 'horizontal';
+    resultsEl.classList.toggle('cards-horizontal', horizontal);
+    pager.classList.toggle('above-cards', horizontal);
+    resultsEl.parentElement.insertBefore(pager, horizontal ? cardsNav : resultsEl.nextSibling);
+    cardsNav.hidden = !horizontal;
+    document.body.classList.toggle('timeline-tracking', active && !horizontal);
+    if (cardTextObserver) cardTextObserver.disconnect();
+    cardTextObserver = null;
+    if (!active) {
+      setFocusedCard(null);
+      return;
+    }
+    if (timelineExpanded) {
+      // Text only as it comes near view: a page can hold 100 very long documents.
+      cardTextObserver = new IntersectionObserver(entries => {
+        entries.filter(e => e.isIntersecting).forEach(e => {
+          e.target.loadText();
+          cardTextObserver.unobserve(e.target);
+        });
+      }, { rootMargin: '300px' });
+      timelineCards().forEach(card => {
+        card.setOpen(true);
+        cardTextObserver.observe(card);
+      });
+    }
+    pickFocusedCard();
+  }
+
+  function setTimelineExpanded(on) {
+    timelineExpanded = on;
+    savePref(TIMELINE_EXPAND_KEY, on ? '1' : '0');
+    if (!on) timelineCards().forEach(card => card.setOpen(false));
+    renderTimeline(timelineData);
+    applyTimelineCards();
+  }
+
+  // The card nearest the middle of the row, or of the window below the chart.
+  function pickFocusedCard() {
+    if (collectionView !== 'timeline' || diamondDrag) return;
+    const cards = timelineCards();
+    if (!cards.length) return setFocusedCard(null);
+    const horizontal = resultsEl.classList.contains('cards-horizontal');
+    const area = resultsEl.getBoundingClientRect();
+    const chartBottom = timelineEl.getBoundingClientRect().bottom;
+    const middle = horizontal ? area.left + area.width / 2 : (Math.max(0, chartBottom) + window.innerHeight) / 2;
+    const distance = card => {
+      const r = card.getBoundingClientRect();
+      if (horizontal) return Math.abs(r.left + r.width / 2 - middle);
+      return middle < r.top ? r.top - middle : middle > r.bottom ? middle - r.bottom : 0;
+    };
+    setFocusedCard(cards.reduce((best, card) => (distance(card) < distance(best) ? card : best)));
+  }
+
+  function queueFocus() {
+    if (focusQueued || collectionView !== 'timeline') return;
+    focusQueued = true;
+    requestAnimationFrame(() => {
+      focusQueued = false;
+      pickFocusedCard();
+    });
+  }
+  window.addEventListener('scroll', queueFocus, { passive: true });
+  window.addEventListener('resize', queueFocus, { passive: true });
+  resultsEl.addEventListener('scroll', () => {
+    queueFocus();
+    closeCollectMenus();
+  }, { passive: true });
+  resultsEl.addEventListener('focusin', e => {
+    const card = e.target.closest('.result');
+    if (card && collectionView === 'timeline') setFocusedCard(card);
+  });
+  resultsEl.addEventListener('keydown', e => {
+    if (!resultsEl.classList.contains('cards-horizontal') || e.target.matches('input, select, textarea')) return;
+    const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    stepFocusedCard(step);
+  });
+
+  function stepFocusedCard(step) {
+    const cards = timelineCards();
+    const next = cards[cards.indexOf(focusedCard) + step];
+    if (next) centreCard(next);
+  }
+
+  // Holding the middle button on the diamond drags it along the chart, and the cards
+  // follow: on this page straight away, and on another once it's let go. The chart's
+  // counts per day say where any date falls in the list, which runs oldest first.
+  const DIAMOND_GRAB_PX = 18;
+  let diamondDrag = null;
+
+  function nearDiamond(e) {
+    const diamond = timelineEl.querySelector('.timeline-diamond');
+    if (!diamond || collectionView !== 'timeline') return false;
+    const r = diamond.getBoundingClientRect();
+    return Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2)) <= DIAMOND_GRAB_PX;
+  }
+
+  // How many dated documents come before a date, so where it falls in the list.
+  function listPosition(date) {
+    const days = (timelineData && timelineData.days) || [];
+    const before = days.filter(d => d.date < date).reduce((sum, d) => sum + d.count, 0);
+    const dated = days.reduce((sum, d) => sum + d.count, 0);
+    return Math.max(0, Math.min(before, dated - 1));
+  }
+
+  function jumpToCard(card) {
+    if (resultsEl.classList.contains('cards-horizontal')) {
+      centreCard(card, 'auto');
+    } else {
+      const r = card.getBoundingClientRect();
+      const top = Math.max(0, timelineEl.getBoundingClientRect().bottom);
+      window.scrollBy({ top: r.top + r.height / 2 - (top + window.innerHeight) / 2, behavior: 'auto' });
+    }
+  }
+
+  function dragDiamondTo(e) {
+    // Measured from the chart, not the window: following a card can scroll the page,
+    // and so the chart, under a pointer that hasn't moved.
+    const chart = timelineEl.querySelector('.timeline-squares, .timeline-bars');
+    const now = chart.getBoundingClientRect();
+    const el = document.elementFromPoint(e.clientX - diamondDrag.chartX + now.left, e.clientY - diamondDrag.chartY + now.top);
+    const period = el && chart.contains(el) ? el.closest('[data-index]') : null;
+    if (!period || period === diamondDrag.period) return;
+    const position = listPosition(period.dataset.start);
+    const pageStart = Math.floor(position / ROWS_PER_PAGE) * ROWS_PER_PAGE;
+    diamondDrag.period = period;
+    diamondDrag.position = position;
+    diamondDrag.page = pageStart === currentStart ? null : pageStart / ROWS_PER_PAGE;
+    if (diamondDrag.page === null) {
+      const card = timelineCards()[position - currentStart];
+      if (card) {
+        jumpToCard(card);
+        setFocusedCard(card);
+        return;
+      }
+    }
+    drawDiamond();
+  }
+
+  timelineEl.addEventListener('mousedown', e => {
+    // Otherwise the middle button starts the browser's own autoscroll.
+    if (e.button === 1 && nearDiamond(e)) e.preventDefault();
+  });
+  timelineEl.addEventListener('pointerdown', e => {
+    if (e.button !== 1 || !nearDiamond(e)) return;
+    stopCoast();
+    const period = timelineEl.querySelector('.timeline-diamond');
+    if (!period) return;
+    const day = focusedCard && focusedCard.dataset.day;
+    const chart = timelineEl.querySelector('.timeline-squares, .timeline-bars');
+    const box = chart.getBoundingClientRect();
+    diamondDrag = {
+      id: e.pointerId, page: null, position: null, chartX: box.left, chartY: box.top,
+      period: [...chart.querySelectorAll('[data-index]')].find(el => el.dataset.start <= day && day < el.dataset.end),
+    };
+    timelineEl.setPointerCapture(e.pointerId);
+    timelineEl.classList.add('diamond-dragging');
+  });
+  timelineEl.addEventListener('pointermove', e => {
+    if (diamondDrag) dragDiamondTo(e);
+    else timelineEl.classList.toggle('diamond-near', nearDiamond(e));
+  });
+  function endDiamondDrag(e) {
+    if (!diamondDrag || e.pointerId !== diamondDrag.id) return;
+    const { page, position } = diamondDrag;
+    const cancelled = e.type === 'pointercancel';
+    diamondDrag = null;
+    timelineEl.classList.remove('diamond-dragging');
+    if (page === null || cancelled) {
+      pickFocusedCard();
+      drawDiamond();
+      return;
+    }
+    const start = page * ROWS_PER_PAGE;
+    showTimeline(start).then(() => {
+      const card = timelineCards()[position - start];
+      if (card) {
+        jumpToCard(card);
+        setFocusedCard(card);
+      }
+    });
+  }
+  timelineEl.addEventListener('pointerleave', () => timelineEl.classList.remove('diamond-near'));
+  timelineEl.addEventListener('pointerup', endDiamondDrag);
+  timelineEl.addEventListener('pointercancel', endDiamondDrag);
+
+  function centreCard(card, behavior) {
+    // Along the row only: scrollIntoView would also move the page, to fit a tall card.
+    const row = resultsEl.getBoundingClientRect();
+    const spot = card.getBoundingClientRect();
+    resultsEl.scrollTo({
+      left: resultsEl.scrollLeft + spot.left + spot.width / 2 - (row.left + row.width / 2),
+      behavior: behavior || (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'),
+    });
+  }
+
+  // Clicking another card brings it to the middle, unless the click was for
+  // something in it, or the end of selecting its text.
+  resultsEl.addEventListener('click', e => {
+    if (!resultsEl.classList.contains('cards-horizontal')) return;
+    const card = e.target.closest('.result');
+    if (!card || card === focusedCard || e.target.closest('a, button, input, label, select, textarea, .collect-menu')) return;
+    if (String(window.getSelection())) return;
+    centreCard(card);
+  });
+
+  // Holding the middle button grabs the row. The faster the drag, the further each
+  // pixel carries it, and it coasts on after letting go, slowing to a stop.
+  const GRAB_MOVED_PX = 4;           // less than this is a click, not a drag
+  const GRAB_GAIN_PER_SPEED = 0.8;   // extra movement per px/ms of drag speed
+  const GRAB_MAX_GAIN = 4;
+  const COAST_TIME_MS = 350;         // how quickly it slows: smaller stops sooner
+  const COAST_MIN_SPEED = 0.03;      // px/ms
+  const COAST_MAX_SPEED = 6;         // px/ms: a hard flick travels about 2,100px, four or five cards
+  const SPEED_SMOOTHING = 0.3;
+  let grab = null;
+  let coast = null;
+  let grabJustDragged = false;
+
+  function stopCoast() {
+    if (coast) cancelAnimationFrame(coast);
+    coast = null;
+  }
+
+  function startCoast(speed) {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    speed = Math.max(-COAST_MAX_SPEED, Math.min(COAST_MAX_SPEED, speed));
+    let last = performance.now();
+    const step = now => {
+      const elapsed = now - last;
+      last = now;
+      const before = resultsEl.scrollLeft;
+      resultsEl.scrollLeft += speed * elapsed;
+      speed *= Math.exp(-elapsed / COAST_TIME_MS);
+      // Stops at either end, rather than pushing against it.
+      const stuck = elapsed > 0 && resultsEl.scrollLeft === before && Math.abs(speed * elapsed) >= 1;
+      coast = Math.abs(speed) < COAST_MIN_SPEED || stuck ? null : requestAnimationFrame(step);
+    };
+    coast = requestAnimationFrame(step);
+  }
+
+  resultsEl.addEventListener('mousedown', e => {
+    // Otherwise the middle button starts the browser's own autoscroll.
+    if (e.button === 1 && resultsEl.classList.contains('cards-horizontal')) e.preventDefault();
+  });
+  resultsEl.addEventListener('pointerdown', e => {
+    stopCoast();
+    if (e.button !== 1 || !resultsEl.classList.contains('cards-horizontal')) return;
+    grab = { id: e.pointerId, startX: e.clientX, x: e.clientX, time: e.timeStamp, speed: 0, dragged: false };
+    grabJustDragged = false;
+    resultsEl.setPointerCapture(e.pointerId);
+  });
+  resultsEl.addEventListener('pointermove', e => {
+    if (!grab || e.pointerId !== grab.id) return;
+    const moved = e.clientX - grab.x;
+    const elapsed = Math.max(1, e.timeStamp - grab.time);
+    grab.x = e.clientX;
+    grab.time = e.timeStamp;
+    if (!grab.dragged && Math.abs(e.clientX - grab.startX) < GRAB_MOVED_PX) return;
+    if (!grab.dragged) resultsEl.classList.add('grabbing');
+    grab.dragged = true;
+    const speed = moved / elapsed;
+    const gain = Math.min(GRAB_MAX_GAIN, 1 + Math.abs(speed) * GRAB_GAIN_PER_SPEED);
+    grab.speed += ((speed * gain) - grab.speed) * SPEED_SMOOTHING;
+    resultsEl.scrollLeft -= moved * gain;
+  });
+  function endGrab(e) {
+    if (!grab || e.pointerId !== grab.id) return;
+    const { dragged, speed, time } = grab;
+    grab = null;
+    resultsEl.classList.remove('grabbing');
+    grabJustDragged = dragged;
+    // Pausing before letting go means stopping, not throwing.
+    if (dragged && e.type === 'pointerup' && e.timeStamp - time < 100) startCoast(-speed);
+  }
+  resultsEl.addEventListener('pointerup', endGrab);
+  resultsEl.addEventListener('pointercancel', endGrab);
+  // A drag that began on a link mustn't also open it in a new tab.
+  resultsEl.addEventListener('auxclick', e => {
+    if (e.button === 1 && grabJustDragged) e.preventDefault();
+    grabJustDragged = false;
+  });
+  resultsEl.addEventListener('wheel', stopCoast, { passive: true });
+
+  function setFocusedCard(card) {
+    if (focusedCard !== card) {
+      if (focusedCard) focusedCard.classList.remove('focused');
+      if (card) card.classList.add('focused');
+      focusedCard = card;
+    }
+    cardPrev.disabled = !card || !card.previousElementSibling;
+    cardNext.disabled = !card || !card.nextElementSibling;
+    drawDiamond();
+  }
+
+  // The diamond sits inside the chart, so it scrolls with it, on the period holding
+  // the focused card's date.
+  function drawDiamond() {
+    const label = timelineEl.querySelector('.timeline-focus');
+    const old = timelineEl.querySelector('.timeline-diamond');
+    const day = focusedCard && focusedCard.dataset.day;
+    const chart = timelineEl.querySelector('.timeline-squares, .timeline-bars');
+    const period = diamondDrag ? diamondDrag.period
+      : day && chart ? [...chart.querySelectorAll('[data-index]')].find(el => el.dataset.start <= day && day < el.dataset.end) : null;
+    if (label) {
+      label.textContent = '';
+      if (diamondDrag && diamondDrag.page !== null) {
+        label.textContent = `\u25C6 Let go to open page ${diamondDrag.page + 1}, at ${timelineLabel({ start: period.dataset.start }, 'day')} UTC`;
+      } else if (focusedCard) {
+        const name = document.createElement('strong');
+        name.textContent = focusedCard.dataset.title;
+        label.append(document.createTextNode('\u25C6 '), name, document.createTextNode(day ? ` · ${timelineLabel({ start: day }, 'day')} UTC` : ' · no date, so not on the chart'));
+      }
+    }
+    if (!period) {
+      if (old) old.remove();
+      return;
+    }
+    const diamond = old && old.parentElement === chart ? old : document.createElement('span');
+    if (diamond !== old) {
+      if (old) old.remove();
+      diamond.className = 'timeline-diamond';
+      diamond.setAttribute('aria-hidden', 'true');
+      chart.style.position = 'relative';
+      chart.appendChild(diamond);
+    }
+    const box = chart.getBoundingClientRect();
+    const spot = period.getBoundingClientRect();
+    const mark = period.querySelector('.mark');
+    diamond.style.left = `${spot.left + spot.width / 2 - box.left}px`;
+    diamond.style.top = `${(mark ? mark.getBoundingClientRect().top : spot.top + spot.height / 2) - box.top}px`;
+    // Within the chart's own scrolling only, never the window's.
+    const scroller = chart.closest('.timeline-scroll');
+    if (scroller) {
+      const view = scroller.getBoundingClientRect();
+      if (spot.left < view.left || spot.right > view.right) scroller.scrollLeft += spot.left + spot.width / 2 - (view.left + view.width / 2);
+      if (spot.top < view.top || spot.bottom > view.bottom) scroller.scrollTop += spot.top + spot.height / 2 - (view.top + view.height / 2);
+    }
   }
 
   // A bucket's name; periods are UTC, so they're formatted as UTC too.
@@ -2295,8 +2857,19 @@
             `<button type="button" data-shape="${shape}" class="${shape === timelineShape ? 'active' : ''}">${label}</button>`).join('')}
           ${timelineRange ? `<button type="button" class="timeline-back">&larr; Back</button>
             <button type="button" class="timeline-reset">Reset View</button>` : ''}
+          <span class="timeline-divider"></span>
+          ${[['vertical', 'Vertical'], ['horizontal', 'Horizontal']].map(([way, label]) =>
+            `<button type="button" data-cards="${way}" class="${way === timelineCardsWay ? 'active' : ''}" title="Which way the cards below run">${label}</button>`).join('')}
+          <button type="button" class="timeline-expand ${timelineExpanded ? 'active' : ''}" title="Open every card, with its details and text">${timelineExpanded ? 'Collapse cards' : 'Expand cards'}</button>
         </div>
       </div>`;
+    timelineEl.querySelectorAll('[data-cards]').forEach(b => b.addEventListener('click', () => {
+      timelineCardsWay = b.dataset.cards;
+      savePref(TIMELINE_CARDS_KEY, timelineCardsWay);
+      renderTimeline(timelineData);
+      applyTimelineCards();
+    }));
+    timelineEl.querySelector('.timeline-expand').addEventListener('click', () => setTimelineExpanded(!timelineExpanded));
     timelineEl.querySelectorAll('[data-shape]').forEach(b => b.addEventListener('click', () => {
       timelineShape = b.dataset.shape;
       savePref(TIMELINE_SHAPE_KEY, timelineShape);
@@ -2320,9 +2893,21 @@
         showTimeline(0);
       });
     }
-    if (!data.buckets.length) return;
-    if (squares) renderSquares(squares);
-    else renderBars(data);
+    if (data.buckets.length) {
+      if (squares) renderSquares(squares);
+      else renderBars(data);
+    }
+    const note = document.createElement('div');
+    note.className = 'timeline-hint timeline-note';
+    note.textContent = 'Chart dates are in UTC, so a card showing your local time can differ by a day.'
+      + ' To jump through time, hold the middle mouse button on the diamond and drag.'
+      + (timelineCardsWay === 'horizontal' ? ' To move along the cards, hold the middle mouse button and drag.' : '');
+    timelineEl.appendChild(note);
+    const focusLine = document.createElement('div');
+    focusLine.className = 'timeline-focus';
+    focusLine.setAttribute('aria-live', 'polite');
+    timelineEl.appendChild(focusLine);
+    drawDiamond();
   }
 
   const docCount = n => `${n.toLocaleString()} document${n === 1 ? '' : 's'}`;
@@ -2443,6 +3028,8 @@
       bar.type = 'button';
       bar.className = 'timeline-bar';
       bar.dataset.index = i;
+      bar.dataset.start = b.start;
+      bar.dataset.end = b.end;
       bar.title = label;
       bar.setAttribute('aria-label', label);
       if (b.count) {
@@ -2590,6 +3177,8 @@
       const monthEnd = unit === 'day' && addDays(c.start, 1).endsWith('-01');
       square.className = `timeline-square shade-${level(c.count)}${monthEnd ? ' month-end' : ''}`;
       square.dataset.index = i;
+      square.dataset.start = c.start;
+      square.dataset.end = c.end;
       square.title = label;
       square.setAttribute('aria-label', label);
       // One tab stop for the whole grid; the arrow keys move within it.
@@ -2645,6 +3234,9 @@
     collectionView = null;
     collectionBanner.hidden = true;
     timelineEl.hidden = true;
+    input.placeholder = (CONFIG.app && CONFIG.app.search_placeholder) || 'Search…';
+    document.getElementById('searchEverything').hidden = true;
+    applyTimelineCards();
     resetTimelineZoom();
     loadPage = s => runSearch(currentQuery, s);
     if (was) refreshPanelIfOpen();
@@ -2652,6 +3244,9 @@
 
   function backToSearch() {
     leaveCollectionView();
+    if (mainSearch) setSearchInputs(mainSearch);
+    mainSearch = null;
+    loadFacets();
     if (hasSearched) runSearch(currentQuery, 0);
     else {
       resultsEl.innerHTML = '<div class="empty-state"><div class="big">// ready</div>Enter a search term above to query the index.</div>';

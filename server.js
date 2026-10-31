@@ -154,9 +154,11 @@ const TYPE_ALIASES = config.types.aliases;
 const TYPE_GROUPS = Object.fromEntries(config.types.groups.map(g => [g.key, g.members || []]));
 const SCOPE_HOSTS = Object.fromEntries(config.sources.map(s => [s.key, s.host]));
 
+const DATE_RANGE = 'date_range';  // value: "from..to", either end optional
+
 // Filter key -> index field. "type" and "share" are built in; every other
 // configured filter names its own field.
-const FIELD_MAP = { type: F.type, share: F.share };
+const FIELD_MAP = { type: F.type, share: F.share, [DATE_RANGE]: F.created };
 for (const f of config.filters) {
   if (f.key !== 'type' && f.key !== 'share' && f.field) FIELD_MAP[f.key] = f.field;
 }
@@ -203,6 +205,12 @@ function buildFilterBool(filters, logic, dateFrom, dateTo, scope, roles) {
   const active = filters.filter(f => f.value && Object.hasOwn(FIELD_MAP, f.field));
   const toClause = f => {
     const field = FIELD_MAP[f.field];
+    if (f.field === DATE_RANGE) {
+      const ends = f.value.split('..');
+      // Either way round: someone filling in the second date first means the same.
+      const [from, to] = ends[0] && ends[1] ? [...ends].sort() : ends;
+      return { range: { [field]: { ...(from && { gte: toIsoDate(from, false) }), ...(to && { lte: toIsoDate(to, true) }) } } };
+    }
     if (f.field === 'type') {
       // A broad category (types.groups, e.g. "images") matches any of its
       // members; a merged alias (types.aliases, jpg/jpeg) matches each of
@@ -252,6 +260,18 @@ function buildFilterBool(filters, logic, dateFrom, dateTo, scope, roles) {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+function isRealDay(value) {
+  const d = new Date(`${value}T00:00:00Z`);
+  return DATE_RE.test(value) && !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
+
+// A row with neither end filled in is one nobody has finished, and is ignored.
+function isDateRange(value) {
+  const ends = value.split('..');
+  if (value === '') return true;
+  return ends.length === 2 && ends.some(Boolean) && ends.every(end => !end || isRealDay(end));
+}
+
 // filters is a JSON array of { field, value } string pairs, each with an
 // optional boolean `not` (exclude matches); dates are
 // YYYY-MM-DD. Anything else is a 400, not a malformed OpenSearch query.
@@ -267,6 +287,7 @@ function parseFilterParams(req) {
     && (f.not === undefined || typeof f.not === 'boolean'))) {
     throw new BadRequest('Invalid filters parameter');
   }
+  if (!filters.every(f => f.field !== DATE_RANGE || isDateRange(f.value))) throw new BadRequest('Invalid date range');
   const logic = queryParam(req, 'logic').toUpperCase() === 'OR' ? 'OR' : 'AND';
   const from = queryParam(req, 'dateFrom');
   const to = queryParam(req, 'dateTo');
@@ -353,11 +374,17 @@ function resultPage(hits, start, numFound) {
   return { numFound, start, docs, highlighting };
 }
 
+// Limits a search to one of the user's collections, for ?collection=<id>. Inside
+// the same filter as the roles, so it applies to the nearest-neighbour search too.
+function collectionFilter(req, id = queryParam(req, 'collection')) {
+  return id ? [{ terms: { [F.id]: collections.items(collectionOwner(req), id) } }] : [];
+}
+
 // The query for the search described by the request's parameters, shared by
 // /api/search and "add all results to a collection" so that they always
 // match the same documents. depth: how far down the results it'll be read,
 // which hybrid search has to be told.
-function buildSearchQuery(req, depth = config.vector.k) {
+function buildSearchQuery(req, depth = config.vector.k, collectionId) {
   const qRaw = queryParam(req, 'q').trim();
   // "quoted" search: require the exact phrase, not just all/any of its
   // words anywhere in the field.
@@ -369,6 +396,7 @@ function buildSearchQuery(req, depth = config.vector.k) {
   // with none set it lists everything the signed-in user can see (still capped
   // by role + pagination) -- match_all in place of the text search below.
   const filterBool = buildFilterBool(filters, logic, dateFrom, dateTo, queryParam(req, 'scope'), req.session.user.roles);
+  filterBool.push(...collectionFilter(req, collectionId));
   const mode = searchMode(req, q);
 
   const textMatch = q ? {
@@ -386,9 +414,9 @@ function buildSearchQuery(req, depth = config.vector.k) {
 }
 
 app.get('/api/search', requireAuth, async (req, res) => {
-  const start = parseInt(queryParam(req, 'start'), 10) || 0;
-  const rows = parseInt(queryParam(req, 'rows'), 10) || 10;
-  const { query, mode, textMatch } = buildSearchQuery(req);
+  const { start, rows } = pageParams(req);
+  // Hybrid search only ranks this far down, so it has to reach the page asked for.
+  const { query, mode, textMatch } = buildSearchQuery(req, Math.max(config.vector.k, start + rows));
 
   const body = {
     from: start,
@@ -452,9 +480,13 @@ function collectionOwner(req) {
   return String(req.session.user.username).toLowerCase();
 }
 
+const MAX_PAGE_ROWS = 1000;
+// Previews re-read each document's text, which a single large query does badly.
+const PREVIEW_BATCH = 100;
+
 function pageParams(req) {
   const start = Math.max(0, parseInt(queryParam(req, 'start'), 10) || 0);
-  const rows = Math.min(100, Math.max(1, parseInt(queryParam(req, 'rows'), 10) || 10));
+  const rows = Math.min(MAX_PAGE_ROWS, Math.max(1, parseInt(queryParam(req, 'rows'), 10) || 10));
   return { start, rows };
 }
 
@@ -465,22 +497,26 @@ function docIdParam(value) {
 
 // Hits for the documents among ids (F.id values) that this user can see now,
 // in the order given. Unknown and forbidden ids are left out alike.
-async function visibleHits(req, ids, { source = [F.id], preview = false } = {}) {
+async function visibleHits(req, ids, { source = [F.id], preview = false, highlightQuery } = {}) {
   if (!ids.length) return [];
   const data = await osSearch({
     size: ids.length,
     _source: source,
     query: { bool: { filter: [{ terms: { [F.id]: ids } }, roleFilter(req.session.user.roles)] } },
-    ...(preview && { highlight: previewHighlight() }),
+    ...(preview && { highlight: previewHighlight(highlightQuery) }),
   });
   const byId = new Map(data.hits.hits.map(h => [h._source[F.id], h]));
   return ids.map(id => byId.get(id)).filter(Boolean);
 }
 
 // A page of documents by id, in that order, with previews.
-async function pageOfIds(req, ids, start, rows, total) {
-  const hits = await visibleHits(req, ids.slice(start, start + rows), { source: SEARCH_FIELDS, preview: true });
-  return resultPage(hits, start, total);
+async function pageOfIds(req, ids, start, rows, total, highlightQuery) {
+  const page = ids.slice(start, start + rows);
+  const batches = [];
+  for (let i = 0; i < page.length; i += PREVIEW_BATCH) {
+    batches.push(await visibleHits(req, page.slice(i, i + PREVIEW_BATCH), { source: SEARCH_FIELDS, preview: true, highlightQuery }));
+  }
+  return resultPage(batches.flat(), start, total);
 }
 
 app.get('/api/collections', requireAuth, (req, res) => {
@@ -578,12 +614,21 @@ function dayParam(req, name) {
 app.get('/api/collections/:id/timeline', requireAuth, async (req, res) => {
   const owner = collectionOwner(req);
   const { id, name, description } = collections.get(owner, req.params.id);
-  const ids = collections.items(owner, id);
+  const allIds = collections.items(owner, id);
   const { start, rows } = pageParams(req);
+  // Given a search, the chart and the list cover what it finds in the collection.
+  const searching = ['q', 'filters', 'dateFrom', 'dateTo', 'scope'].some(name => queryParam(req, name));
+  // Limited to this collection within the query itself: a hybrid query can't be
+  // wrapped in another, and semantic matches have to be drawn from these documents.
+  const { query, textMatch } = searching ? buildSearchQuery(req, MAX_ITEMS, id) : {};
   const from = dayParam(req, 'from');
   const to = dayParam(req, 'to');
   const zoomed = from !== null || to !== null;
   try {
+    const matched = searching
+      ? new Set((await osSearch({ size: MAX_ITEMS, _source: [F.id], query })).hits.hits.map(h => h._source[F.id]))
+      : null;
+    const ids = matched ? allIds.filter(docId => matched.has(docId)) : allIds;
     const hits = await visibleHits(req, ids, { source: [F.id, F.created] });
     const entries = hits.map(h => ({ id: h._source[F.id], time: parseDocDate(h._source[F.created]) }));
     const undated = entries.filter(e => e.time === null).map(e => e.id);
@@ -592,7 +637,7 @@ app.get('/api/collections/:id/timeline', requireAuth, async (req, res) => {
       .filter(e => (from === null || e.time >= from) && (to === null || e.time < to))
       .sort((a, b) => a.time - b.time);
     const ordered = [...dated.map(e => e.id), ...(zoomed ? [] : undated)];
-    const page = await pageOfIds(req, ordered, start, rows, ordered.length);
+    const page = await pageOfIds(req, ordered, start, rows, ordered.length, textMatch);
     res.json({
       ...page,
       ...timelineBuckets(dated.map(e => e.time)),
@@ -1056,10 +1101,12 @@ app.get('/api/facets', requireAuth, async (req, res) => {
   const typeContextFilters = buildFilterBool(
     filters.filter(f => f.field !== 'type'), logic, dateFrom, dateTo, queryParam(req, 'scope'), req.session.user.roles
   );
+  const inCollection = collectionFilter(req);
+  typeContextFilters.push(...inCollection);
 
   const body = {
     size: 0,
-    query: { bool: { filter: [roleFilter(req.session.user.roles)] } },
+    query: { bool: { filter: [roleFilter(req.session.user.roles), ...inCollection] } },
     aggs: {
       types: {
         filter: { bool: { filter: typeContextFilters } },
