@@ -457,6 +457,7 @@
 
   .date-row {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
   }
 
@@ -474,8 +475,15 @@
     color: var(--text-dim);
   }
 
+  date-select { display: inline-flex; gap: 4px; }
+  date-select input[type="number"] { width: 5.5em; min-width: 0; }
+  .filter-field { max-width: 100%; }
+  .date-row { align-items: center; }
+  .date-sep { color: var(--text-dim); }
+  .filters date-select select, .filters date-select input { padding: 8px 6px; }
+
   .filters select,
-  .filters input[type="date"],
+  .filters input[type="number"],
   .filters input[type="text"] {
     background: var(--panel);
     border: 1px solid var(--border);
@@ -752,6 +760,7 @@
     .dock-switch .dock-side { display: none; }
   }
 </style>
+<link rel="stylesheet" href="/board.css">
 </head>
 <body>
   <div class="shell">
@@ -830,8 +839,9 @@
       <div class="filter-field">
         <label>Date range</label>
         <div class="date-row">
-          <input type="date" id="dateFromFilter" title="After">
-          <input type="date" id="dateToFilter" title="Before">
+          <date-select id="dateFromFilter" aria-label="On or after" title="On or after"></date-select>
+          <span class="date-sep" aria-hidden="true">&ndash;</span>
+          <date-select id="dateToFilter" aria-label="On or before" title="On or before"></date-select>
         </div>
       </div>
       <button type="button" class="clear-filters" id="clearFilters">Clear all filters</button>
@@ -878,6 +888,81 @@
   </div>
 
 <script>
+  // A date as day, month and year fields, used in place of <input type="date">,
+  // whose pickers vary by browser and whose months wrap around: Firefox's as a
+  // rolling list, and Chromium's from December to January of the same year.
+  // Like that input, its value is YYYY-MM-DD or '', and it fires "change".
+  class DateSelect extends HTMLElement {
+    #day; #month; #year;
+
+    #build() {
+      if (this.#day) return;
+      const parts = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' }).formatToParts(new Date(2024, 0, 15));
+      const select = (label, options) => {
+        const el = document.createElement('select');
+        el.setAttribute('aria-label', label);
+        el.add(new Option(label, ''));
+        options.forEach(([value, text]) => el.add(new Option(text, value)));
+        el.addEventListener('change', e => this.#changed(e));
+        return el;
+      };
+      this.#day = select('Day', Array.from({ length: 31 }, (_, i) => [String(i + 1).padStart(2, '0'), String(i + 1)]));
+      const monthName = new Intl.DateTimeFormat(undefined, { month: 'short', timeZone: 'UTC' });
+      this.#month = select('Month', Array.from({ length: 12 }, (_, i) => [String(i + 1).padStart(2, '0'), monthName.format(new Date(Date.UTC(2024, i, 1)))]));
+      this.#year = document.createElement('input');
+      this.#year.type = 'number';
+      this.#year.min = 1;
+      this.#year.max = 9999;
+      this.#year.placeholder = 'Year';
+      this.#year.setAttribute('aria-label', 'Year');
+      // A number field's own arrows would run a search for each step or digit if
+      // this listened to "input", so a year counts once it's finished.
+      this.#year.addEventListener('change', e => this.#changed(e));
+      // Not changed by scrolling past it.
+      this.#year.addEventListener('wheel', e => { if (document.activeElement === this.#year) this.#year.blur(); }, { passive: true });
+      const order = { day: this.#day, month: this.#month, year: this.#year };
+      this.append(...parts.filter(p => order[p.type]).map(p => order[p.type]));
+    }
+
+    connectedCallback() { this.#build(); }
+
+    // Months with fewer days don't offer the rest, and a chosen day moves back to fit.
+    #fitDays() {
+      const year = Number(this.#year.value) || 2024;
+      const month = Number(this.#month.value) || 1;
+      const days = this.#month.value ? new Date(Date.UTC(2000, month, 0)).getUTCDate() - (month === 2 && !(year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) ? 1 : 0) : 31;
+      [...this.#day.options].slice(1).forEach((o, i) => { o.hidden = o.disabled = i + 1 > days; });
+      if (Number(this.#day.value) > days) this.#day.value = String(days).padStart(2, '0');
+    }
+
+    // The fields' own events stop here: only a whole date counts as a change.
+    #changed(e) {
+      e.stopPropagation();
+      const before = this.lastValue || '';
+      this.#fitDays();
+      this.lastValue = this.value;
+      if (this.value !== before) this.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    get value() {
+      this.#build();
+      const year = Number(this.#year.value);
+      if (!Number.isInteger(year) || year < 1 || year > 9999 || !this.#month.value || !this.#day.value) return '';
+      return `${String(year).padStart(4, '0')}-${this.#month.value}-${this.#day.value}`;
+    }
+
+    set value(date) {
+      this.#build();
+      const [year = '', month = '', day = ''] = String(date || '').split('-');
+      this.#year.value = year ? String(Number(year)) : '';
+      this.#month.value = month;
+      this.#day.value = day;
+      this.#fitDays();
+      this.lastValue = this.value;
+    }
+  }
+  customElements.define('date-select', DateSelect);
+
   const form = document.getElementById('searchForm');
   const input = document.getElementById('queryInput');
   const resultsEl = document.getElementById('results');
@@ -1433,7 +1518,8 @@
         const coord = (lat !== undefined && lon !== undefined) ? `${Number(lat).toFixed(4)}, ${Number(lon).toFixed(4)}` : null;
         return loc && coord ? `${loc} (${coord})` : (loc || coord);
       }).filter(Boolean).join('; ');
-      const title = (isMail && firstOf(doc.email_subject)) || firstOf(doc.title) || firstOf(doc.email_subject) || firstOf(doc.filename) || doc.id.split('/').pop() || 'Untitled';
+      // An email's subject, wherever it came from: a crawled .eml's title is just its file name.
+      const title = firstOf(doc.email_subject) || firstOf(doc.title) || firstOf(doc.filename) || doc.id.split('/').pop() || 'Untitled';
       const mimetype = firstOf(doc.type);
       const created = fmtDate(doc.created);
       const sender = firstOf(doc.email_from);
@@ -1465,9 +1551,8 @@
       const messageId = firstOf(doc.email_message_id);
 
       const detailFields = [
-        // Title and Subject are the same value for mail (the indexed title is
-        // just the subject plus a synthetic ".eml") -- only show one.
-        [isMail ? null : 'Title', title],
+        // Title and Subject are the same value for an email -- only show one.
+        [subject ? null : 'Title', title],
         [src.share_label || 'Source', share],
         ['Subject', subject],
         ['From', sender],
@@ -2081,6 +2166,7 @@
     collectionBanner.innerHTML = `<span class="banner-title">Collection: <strong>${escapeHtml(openCollection.name)}</strong></span>
       <div class="banner-views">${views.map(([v, label]) =>
         `<button type="button" data-view="${v}" class="${v === collectionView ? 'active' : ''}">${label}</button>`).join('')}</div>
+      <button type="button" class="banner-board" title="Arrange this collection's documents on a board, with notes, groups, connections and a timeline">Board</button>
       <button type="button" class="banner-download" title="Download this collection's files as one zip">&#8595; Download all</button>
       <button type="button" class="banner-back">Back to search</button>
       ${openCollection.description ? `<div class="banner-desc">${escapeHtml(openCollection.description)}</div>` : ''}`;
@@ -2089,6 +2175,9 @@
       else if (b.dataset.view === 'timeline') { resetTimelineZoom(); showTimeline(0); }
       else showSimilar(b.dataset.view, 0);
     }));
+    collectionBanner.querySelector('.banner-board').addEventListener('click', () => {
+      openBoard(openCollection, () => collectionChanged(openCollection.id));
+    });
     collectionBanner.querySelector('.banner-download').addEventListener('click', e => downloadCollection(e.currentTarget));
     collectionBanner.querySelector('.banner-back').addEventListener('click', backToSearch);
   }
@@ -2572,5 +2661,6 @@
     }
   }
 </script>
+<script src="/board.js"></script>
 </body>
 </html>

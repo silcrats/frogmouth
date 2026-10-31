@@ -7,6 +7,7 @@ const { createSmbDownloader, contentDisposition } = require('./lib/downloaders/s
 const { createOpenSearchClient } = require('./lib/opensearch');
 const { openCollections, MAX_ITEMS } = require('./lib/collections');
 const { parseDocDate, timelineBuckets, timelineDays } = require('./lib/timeline');
+const { suggestBoard, rateGroup, closestPassages } = require('./lib/board-suggest');
 const { streamCollectionZip, safeEntryName } = require('./lib/collection-zip');
 
 const config = loadConfig();
@@ -56,6 +57,8 @@ app.use(session({
 // A long selection of results can far exceed the default limit below (1,000
 // ids of up to 2,048 characters), but only from someone signed in.
 app.post(['/api/collections/:id/items/bulk', '/api/collections/:id/items/bulk-remove'], requireAuth, express.json({ limit: '3mb' }));
+// A full board is a large single save: every document's id, and every note.
+app.put('/api/collections/:id/board', requireAuth, express.json({ limit: '12mb' }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
@@ -606,6 +609,211 @@ app.get('/api/collections/:id/timeline', requireAuth, async (req, res) => {
   }
 });
 
+// The collection's evidence board, with what the user can see now of every
+// document in the collection or on the board. Text isn't included: a board can
+// hold every document, and the inspector asks for one's text (/api/document)
+// when it's wanted. A document missing from docs is one they can't see, and its
+// card says only that.
+app.get('/api/collections/:id/board', requireAuth, async (req, res) => {
+  const owner = collectionOwner(req);
+  const { id, name, description } = collections.get(owner, req.params.id);
+  const ids = collections.items(owner, id);
+  const board = collections.board(owner, id);
+  const onBoard = board.objects.filter(o => o.kind === 'doc').map(o => o.doc_id);
+  try {
+    const hits = await visibleHits(req, [...new Set([...ids, ...onBoard])], { source: SEARCH_FIELDS });
+    const docs = {};
+    for (const hit of hits) {
+      const doc = normalizeDoc(hit._source);
+      docs[doc.id] = { ...doc, time: parseDocDate(hit._source[F.created]) };
+    }
+    const items = ids.filter(docId => Object.hasOwn(docs, docId));
+    res.json({ collection: { id, name, description }, board, docs, items, hidden: ids.length - items.length });
+  } catch (err) {
+    console.error('Board error:', err.message);
+    res.status(502).json({ error: 'Could not load the board', detail: err.message });
+  }
+});
+
+app.put('/api/collections/:id/board', requireAuth, (req, res) => {
+  const { revision, board } = req.body || {};
+  if (!Number.isInteger(revision)) throw new BadRequest('Invalid revision');
+  res.json(collections.saveBoard(collectionOwner(req), req.params.id, revision, board));
+});
+
+// Named versions of a board, to go back to. They hold what the board does: ids,
+// positions and what the user typed, so nothing from a document they can't see.
+function versionParam(req) {
+  const id = Number(req.params.versionId);
+  if (!Number.isInteger(id) || id < 1) throw new BadRequest('Invalid version');
+  return id;
+}
+
+app.get('/api/collections/:id/board/versions', requireAuth, (req, res) => {
+  res.json({ versions: collections.boardVersions(collectionOwner(req), req.params.id) });
+});
+
+app.post('/api/collections/:id/board/versions', requireAuth, (req, res) => {
+  const { name, auto } = req.body || {};
+  res.status(201).json(collections.saveBoardVersion(collectionOwner(req), req.params.id, name, auto));
+});
+
+app.post('/api/collections/:id/board/versions/:versionId/restore', requireAuth, (req, res) => {
+  const { revision } = req.body || {};
+  if (!Number.isInteger(revision)) throw new BadRequest('Invalid revision');
+  res.json(collections.restoreBoardVersion(collectionOwner(req), req.params.id, versionParam(req), revision));
+});
+
+app.delete('/api/collections/:id/board/versions/:versionId', requireAuth, (req, res) => {
+  collections.removeBoardVersion(collectionOwner(req), req.params.id, versionParam(req));
+  res.json({ ok: true });
+});
+
+// Suggested connections and groupings for the board as last saved, from the
+// documents on it that the user can see now. The text is read here and not
+// kept. A big board means a lot of text, so one at a time per user.
+const SUGGEST_BATCH = 100;
+// A document can have 100 passages of vectors, so these go a few at a time.
+const VECTOR_BATCH = 25;
+const boardSuggestions = new Set();  // owners with one running
+
+// Calls use(id, source) for each document among ids this user can see, with
+// its vectors and any extra fields, a batch at a time so that only what use
+// keeps stays in memory.
+async function forEachVectors(req, ids, extra, use) {
+  const field = config.vector.field;
+  for (let i = 0; i < ids.length; i += VECTOR_BATCH) {
+    const data = await osSearch({
+      size: VECTOR_BATCH,
+      _source: [F.id, `${field}.knn`, ...extra],
+      query: { bool: { filter: [{ terms: { [F.id]: ids.slice(i, i + VECTOR_BATCH) } }, roleFilter(req.session.user.roles)] } },
+    });
+    for (const hit of data.hits.hits) use(firstValue(hit._source[F.id]), hit._source);
+  }
+}
+
+// What's shown for each "similar meaning" suggestion: the passages that matched.
+async function addPassageEvidence(req, cards, connections) {
+  const { field, chunk_field: chunkField } = config.vector;
+  const meaning = connections.filter(c => c.kind === 'meaning');
+  const docOf = new Map(cards.map(card => [card.id, card.doc.id]));
+  const ids = [...new Set(meaning.flatMap(c => [docOf.get(c.from), docOf.get(c.to)]))];
+  const passages = new Map();
+  await forEachVectors(req, ids, [chunkField], (id, source) => {
+    const texts = source[chunkField] || [];
+    passages.set(id, (source[field] || []).map((p, i) => ({ vector: Float32Array.from(unitVector(p.knn)), text: texts[i] })).filter(p => p.text));
+  });
+  for (const c of meaning) {
+    c.reason = closestPassages(passages.get(docOf.get(c.from)) || [], passages.get(docOf.get(c.to)) || []) || c.reason;
+  }
+}
+
+// The documents on a board that the user can see now, as cards to analyse. Vectors
+// only improve the results, so without them it carries on.
+async function boardCards(req, onBoard) {
+  const ids = onBoard.map(o => o.doc_id);
+  const found = new Map();
+  for (let i = 0; i < ids.length; i += SUGGEST_BATCH) {
+    const data = await osSearch({
+      size: SUGGEST_BATCH,
+      _source: SEARCH_FIELDS,
+      query: { bool: { filter: [{ terms: { [F.id]: ids.slice(i, i + SUGGEST_BATCH) } }, roleFilter(req.session.user.roles)] } },
+      script_fields: START_OF_TEXT,
+    });
+    for (const hit of data.hits.hits) {
+      const doc = normalizeDoc(hit._source);
+      found.set(doc.id, { doc, text: String(((hit.fields || {}).like_text || [])[0] || ''), time: parseDocDate(hit._source[F.created]) });
+    }
+  }
+  const cards = onBoard.filter(o => found.has(o.doc_id)).map(o => {
+    const { doc, text, time } = found.get(o.doc_id);
+    return { id: o.id, doc, text, group: o.group, time: o.date ? Date.parse(`${o.date}T00:00:00Z`) : time };
+  });
+  let vectorsFailed = false;
+  if (config.vector.enabled) {
+    try {
+      const means = new Map();
+      await forEachVectors(req, cards.map(c => c.doc.id), [], (id, source) => {
+        const vector = meanVector((source[config.vector.field] || []).map(p => p.knn));
+        if (vector) means.set(id, Float32Array.from(vector));
+      });
+      for (const card of cards) card.vector = means.get(card.doc.id);
+    } catch (err) {
+      vectorsFailed = true;
+      console.warn('Board suggestions without vectors:', err.message);
+    }
+  }
+  return { cards, vectorsFailed };
+}
+
+const unitVector = v => {
+  const norm = Math.hypot(...v) || 1;
+  return v.map(x => x / norm);
+};
+
+app.get('/api/collections/:id/board/suggestions', requireAuth, async (req, res) => {
+  const owner = collectionOwner(req);
+  const { id } = collections.get(owner, req.params.id);
+  const board = collections.board(owner, id);
+  if (boardSuggestions.has(owner)) return res.status(429).json({ error: 'Already working on suggestions. Try again when they have finished' });
+  boardSuggestions.add(owner);
+  try {
+    const onBoard = board.objects.filter(o => o.kind === 'doc');
+    const { cards, vectorsFailed } = await boardCards(req, onBoard);
+    const suggestions = suggestBoard({
+      cards,
+      entities: board.objects.filter(o => ['person', 'place', 'org', 'event'].includes(o.kind) && o.title),
+      connections: board.connections,
+      dismissed: board.dismissed,
+    });
+    if (suggestions.meaning_used) {
+      await addPassageEvidence(req, cards, suggestions.connections).catch(err => {
+        console.warn('Board suggestions without passages:', err.message);
+      });
+    }
+    res.json({
+      revision: board.revision,
+      analysed: cards.length,
+      unavailable: onBoard.length - cards.length,
+      vectors_failed: vectorsFailed,
+      ...suggestions,
+    });
+  } catch (err) {
+    console.error('Board suggestions error:', err.message);
+    res.status(502).json({ error: 'Could not work out suggestions', detail: err.message });
+  } finally {
+    boardSuggestions.delete(owner);
+  }
+});
+
+// A group's rating for its cards as last saved. It takes reading the whole board,
+// so it shares the limit on suggestions. Only figures and card ids come back.
+app.post('/api/collections/:id/board/groups/:groupId/rate', requireAuth, async (req, res) => {
+  const owner = collectionOwner(req);
+  const { id } = collections.get(owner, req.params.id);
+  const board = collections.board(owner, id);
+  const group = board.groups.find(g => g.id === req.params.groupId);
+  if (!group) return res.status(404).json({ error: 'Group not found' });
+  const members = board.objects.filter(o => o.group === group.id);
+  if (boardSuggestions.has(owner)) return res.status(429).json({ error: 'Already reading this board. Try again when that has finished' });
+  boardSuggestions.add(owner);
+  try {
+    const { cards, vectorsFailed } = await boardCards(req, board.objects.filter(o => o.kind === 'doc'));
+    const inGroup = new Set(cards.filter(c => c.group === group.id).map(c => c.id));
+    if (inGroup.size < 2) return res.status(400).json({ error: 'A group needs at least two documents you can see to be rated' });
+    res.json({
+      quality: { ...rateGroup(cards, [...inGroup]), members: members.map(o => o.id), left_out: 0 },
+      rated: inGroup.size,
+      vectors_failed: vectorsFailed,
+    });
+  } catch (err) {
+    console.error('Group rating error:', err.message);
+    res.status(502).json({ error: 'Could not rate the group', detail: err.message });
+  } finally {
+    boardSuggestions.delete(owner);
+  }
+});
+
 app.post('/api/collections/:id/items', requireAuth, async (req, res) => {
   const owner = collectionOwner(req);
   collections.get(owner, req.params.id);
@@ -798,6 +1006,18 @@ app.get('/api/collections/:id/similar', requireAuth, async (req, res) => {
   }
 });
 
+// The first MLT_TEXT_CHARS of a document, cut down in OpenSearch.
+const START_OF_TEXT = {
+  like_text: {
+    script: {
+      source: 'def c = params._source[params.field]; if (c == null) { return ""; } '
+        + 'String s = c instanceof List ? (c.isEmpty() ? "" : c[0].toString()) : c.toString(); '
+        + 'return s.length() > params.max ? s.substring(0, params.max) : s;',
+      params: { field: F.content, max: MLT_TEXT_CHARS },
+    },
+  },
+};
+
 // more_like_this examples as text: each document's title and the start of
 // its text, cut down in OpenSearch so a huge file isn't sent here and back.
 // (Liking documents by id would need the multi-term-vectors permission,
@@ -807,16 +1027,7 @@ async function exampleTexts(req, ids) {
     size: ids.length,
     _source: [F.title],
     query: { bool: { filter: [{ terms: { [F.id]: ids } }, roleFilter(req.session.user.roles)] } },
-    script_fields: {
-      like_text: {
-        script: {
-          source: 'def c = params._source[params.field]; if (c == null) { return ""; } '
-            + 'String s = c instanceof List ? (c.isEmpty() ? "" : c[0].toString()) : c.toString(); '
-            + 'return s.length() > params.max ? s.substring(0, params.max) : s;',
-          params: { field: F.content, max: MLT_TEXT_CHARS },
-        },
-      },
-    },
+    script_fields: START_OF_TEXT,
   });
   return data.hits.hits
     .map(h => [h._source[F.title], ((h.fields || {}).like_text || [])[0]].filter(Boolean).join('\n'))
