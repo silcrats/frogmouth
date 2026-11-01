@@ -13,6 +13,8 @@
     --text-dim: #8b909c;
     --accent: #5fb3a3;
     --accent-dim: #3d7a70;
+    --highlight: #ffe08a;
+    --advanced: #b69cff;
     --mono: "JetBrains Mono", "SF Mono", Consolas, monospace;
     --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
@@ -367,13 +369,13 @@
     margin-bottom: 4px;
   }
 
-  .filters.hidden { display: none; }
   .filters:empty, #filterRows:empty { display: none; }
 
   #filterRows {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    margin-bottom: 20px;  /* apart from what follows; only there when it has rows */
     flex: 1 1 100%;
     width: 100%;
   }
@@ -409,19 +411,26 @@
     display: block;
   }
 
+  /* As tall as the row it's on, with no padding from the general button style to
+     push the x off centre. */
   .remove-row {
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text-dim);
     font-size: 14px;
-    width: 34px;
-    height: 34px;
+    line-height: 1;
+    width: 36px;
+    padding: 0;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border-radius: 6px;
     cursor: pointer;
     flex-shrink: 0;
   }
 
-  .remove-row:hover { color: #c96a5a; border-color: #c96a5a; }
+  .remove-row:hover { color: #c96a5a; border-color: #c96a5a; background: transparent; }
 
   .add-row-btn {
     background: transparent;
@@ -437,6 +446,32 @@
 
   .add-row-btn:hover { color: var(--accent); border-color: var(--accent-dim); background: transparent; }
 
+  /* Advanced search reads differently, so it should be plain which mode is on. */
+  #queryArea {
+    flex: 1;
+    min-width: 0;
+    height: 46px;
+    max-height: 240px;
+    resize: none;
+    background: var(--panel);
+    color: var(--text);
+    font-size: 15px;
+    line-height: 18px;
+    padding: 13px 16px;
+    border-radius: 6px;
+    font-family: var(--sans);
+    border: 1px solid var(--advanced);
+    box-shadow: 0 0 0 1px var(--advanced);
+  }
+  #queryArea:focus { outline: none; }
+  #queryArea::placeholder { color: var(--text-dim); }
+  #queryArea[hidden], #queryInput[hidden] { display: none; }
+  /* The buttons stay one line high as the box grows. */
+  form.search-form.advanced button { align-self: flex-start; height: 46px; }
+  form.search-form.advanced #searchBtn:not(:disabled) { background: var(--advanced); }
+  form.search-form.advanced #searchBtn:not(:disabled):hover { background: #c7b3ff; }
+  .advanced-hint { order: 1; flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 8px 0; font-size: 12px; color: var(--text-dim); }
+  .advanced-hint[hidden] { display: none; }
   .logic-toggle {
     display: flex;
     align-items: center;
@@ -503,17 +538,11 @@
   }
 
   .filter-toggle {
-    background: transparent;
     color: var(--text-dim);
-    border: none;
     font-size: 12px;
     padding: 4px 0;
-    cursor: pointer;
-    text-align: left;
     font-family: var(--mono);
   }
-
-  .filter-toggle:hover { color: var(--accent); background: transparent; }
 
   .filter-toggle .count {
     display: inline-block;
@@ -651,7 +680,7 @@
   .timeline-focus strong { color: var(--text); font-weight: 600; }
   .timeline-diamond {
     position: absolute; left: 0; top: 0; width: 14px; height: 14px; margin: -7px 0 0 -7px; z-index: 3; pointer-events: none;
-    background: #f2c14e; border: 2px solid #14161a; box-shadow: 0 0 0 1px #f2c14e; transform: rotate(45deg);
+    background: var(--highlight); border: 2px solid #14161a; box-shadow: 0 0 0 1px var(--highlight); transform: rotate(45deg);
     transition: left 0.15s ease, top 0.15s ease;
   }
   @media (prefers-reduced-motion: reduce) { .timeline-diamond { transition: none; } }
@@ -659,7 +688,7 @@
   .timeline.diamond-near .timeline-squares *, .timeline.diamond-near .timeline-bars * { cursor: grab; }
   .timeline.diamond-dragging, .timeline.diamond-dragging * { cursor: grabbing !important; user-select: none; }
   .timeline.diamond-dragging .timeline-diamond { transition: none; transform: rotate(45deg) scale(1.25); }
-  .result.focused { border-color: #f2c14e; }
+  .result.focused { border-color: var(--highlight); }
   .results.cards-horizontal {
     flex-direction: row; align-items: flex-start; gap: 12px; overflow-x: auto; padding: 2px 0 12px;
     overflow-anchor: none;  /* text arriving in a card mustn't shift the page */
@@ -726,6 +755,12 @@
     font-family: var(--mono); font-size: 11px; color: var(--text-dim);
   }
   .timeline-hint { margin-top: 6px; font-size: 12px; color: var(--text-dim); }
+  .timeline-hints[hidden] { display: none; }
+  .timeline-hints .timeline-hint { color: var(--highlight); }
+  .timeline-head .timeline-hints-btn, .timeline-head .timeline-hints-btn:hover, .timeline-head .timeline-hints-btn.active {
+    color: var(--highlight); border-color: var(--highlight); background: transparent;
+  }
+  .header-btn.help-btn, .header-btn.help-btn:hover { color: var(--highlight); border-color: var(--highlight); background: transparent; }
   .timeline-actions { display: flex; gap: 6px; }
   .timeline-head button.active { color: var(--accent); border-color: var(--accent-dim); }
   .timeline-actions { flex-wrap: wrap; }
@@ -775,7 +810,7 @@
   .timeline-square.shade-2, .timeline-square.shade-2:hover { background: #3d8a7c; }
   .timeline-square.shade-3, .timeline-square.shade-3:hover { background: #5fb3a3; }
   .timeline-square.shade-4, .timeline-square.shade-4:hover { background: #a3e6d8; }
-  .timeline-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; }
+  .timeline-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 16px; }
   .timeline-legend {
     display: flex; align-items: center; gap: 3px; margin-top: 6px;
     font-family: var(--mono); font-size: 10px; color: var(--text-dim);
@@ -835,7 +870,7 @@
         </div>
         <div style="text-align:right; padding-top:4px;">
           <div id="whoami" style="font-family:var(--mono); font-size:12px; color:var(--text-dim); margin-bottom:6px;"></div>
-          <a href="/help" target="_blank" rel="noopener" class="header-btn" style="text-decoration:none;">Help</a>
+          <a href="/help" target="_blank" rel="noopener" class="header-btn help-btn" style="text-decoration:none;">Help</a>
           <button type="button" id="collectionsBtn" class="header-btn">Collections</button>
           <button type="button" id="logoutBtn" style="background:transparent; border:1px solid var(--border); color:var(--text-dim); font-size:11px; font-family:var(--mono); padding:5px 10px; border-radius:6px; cursor:pointer;">Sign out</button>
         </div>
@@ -862,6 +897,7 @@
 
     <form class="search-form" id="searchForm">
       <input type="text" id="queryInput" placeholder="Search…" autocomplete="off" autofocus>
+      <textarea id="queryArea" rows="1" placeholder="Search…" autocomplete="off" spellcheck="false" aria-label="Advanced search" hidden></textarea>
       <button type="submit" id="searchBtn">Search</button>
       <button type="button" id="searchEverything" hidden title="Leave this collection and run this search across everything">Search everything</button>
     </form>
@@ -875,20 +911,27 @@
         </div>
       </div>
 
+      <div class="advanced-hint" id="advancedHint" hidden>
+        <code>from:alice AND subject:"budget review" NOT type:pdf</code>
+        <code>date:[2001-01-01 TO 2001-12-31]</code>
+        <code>repor*</code>
+        <span>Shift+Enter for a new line</span>
+        <a href="/help#advanced" target="_blank" rel="noopener" class="header-btn help-btn" style="text-decoration:none;">All the syntax</a>
+      </div>
+
       <div class="logic-toggle" id="modeToggle" style="display:none;">
         Mode:
         <div class="switch">
           <button type="button" data-mode="keyword" title="Documents containing the words searched for">Keyword</button>
           <button type="button" data-mode="semantic" title="Documents closest in meaning, whether or not they use the same words">Semantic</button>
           <button type="button" data-mode="hybrid" title="Both, ranked together">Hybrid</button>
+          <button type="button" data-mode="advanced" title="Lucene query syntax: fields, AND, OR, NOT, wildcards and ranges">Advanced</button>
         </div>
       </div>
     </div>
 
     <div class="filters-bar">
-      <button type="button" class="filter-toggle" id="filterToggle">
-        &darr; Filters <span class="count" id="filterCount" style="display:none;"></span>
-      </button>
+      <span class="filter-toggle">Filters <span class="count" id="filterCount" style="display:none;"></span></span>
       <button type="button" class="add-row-btn" id="addFilterRow">+ Add filter</button>
       <div class="logic-toggle" id="logicToggle" style="display:none;">
         Match:
@@ -900,7 +943,7 @@
       <button type="button" class="clear-filters" id="clearFilters">Clear all filters</button>
     </div>
 
-    <div class="filters hidden" id="filters">
+    <div class="filters" id="filters">
       <div id="filterRows"></div>
     </div>
 
@@ -1028,7 +1071,36 @@
   customElements.define('date-select', DateSelect);
 
   const form = document.getElementById('searchForm');
+  // The search box. Advanced mode shows a box that takes several lines in its
+  // place. The one-line box still holds the search for everything else to read,
+  // with line breaks as spaces, which is all they are to the query parser.
   const input = document.getElementById('queryInput');
+  const queryArea = document.getElementById('queryArea');
+  const oneLine = text => text.replace(/\r?\n/g, ' ');
+  function fitQueryArea() {
+    queryArea.style.height = 'auto';
+    queryArea.style.height = `${Math.max(46, queryArea.scrollHeight + 2)}px`;
+  }
+  // lines: the same search with its line breaks, if it had any.
+  function fillQueryArea(lines) {
+    if (oneLine(queryArea.value) !== input.value) queryArea.value = input.value;
+    if (lines !== undefined && oneLine(lines) === input.value) queryArea.value = lines;
+    if (!queryArea.hidden) fitQueryArea();
+  }
+  function setSearchPlaceholder(text) {
+    input.placeholder = text;
+    queryArea.placeholder = text;
+  }
+  queryArea.addEventListener('input', () => {
+    input.value = oneLine(queryArea.value);
+    fitQueryArea();
+  });
+  queryArea.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      document.getElementById('searchForm').requestSubmit();
+    }
+  });
   const resultsEl = document.getElementById('results');
   const metaRow = document.getElementById('metaRow');
   const pager = document.getElementById('pager');
@@ -1075,9 +1147,7 @@
     window.location.href = '/';
   });
 
-  const filterToggle = document.getElementById('filterToggle');
   const filterCount = document.getElementById('filterCount');
-  const filtersPanel = document.getElementById('filters');
   const filterRowsEl = document.getElementById('filterRows');
   const addFilterRowBtn = document.getElementById('addFilterRow');
   const logicToggle = document.getElementById('logicToggle');
@@ -1135,11 +1205,19 @@
   function setSearchMode(mode) {
     searchMode = mode;
     modeSwitch.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    document.getElementById('advancedHint').hidden = mode !== 'advanced';
+    document.getElementById('searchForm').classList.toggle('advanced', mode === 'advanced');
+    input.hidden = mode === 'advanced';
+    queryArea.hidden = mode !== 'advanced';
+    fillQueryArea();
   }
   modeSwitch.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-mode]');
     if (!btn || btn.dataset.mode === searchMode) return;
+    const wasAdvanced = searchMode === 'advanced';
     setSearchMode(btn.dataset.mode);
+    if (wasAdvanced) input.focus();
+    if (searchMode === 'advanced') queryArea.focus();
     searchAgain();
   });
 
@@ -1340,13 +1418,8 @@
     const firstField = Object.keys(FIELD_LABELS)[0];
     if (!firstField) return;
     filterRows.push({ id: ++rowIdCounter, field: firstField, value: '', not: false });
-    filtersPanel.classList.remove('hidden');  // it may be closed, with this outside it
     renderFilterRows();
     updateFilterCount();
-  });
-
-  filterToggle.addEventListener('click', () => {
-    filtersPanel.classList.toggle('hidden');
   });
 
   logicAndBtn.addEventListener('click', () => {
@@ -1414,7 +1487,7 @@
     }
     document.getElementById('appLabel').textContent = app.label || '';
     document.getElementById('appSubtitle').textContent = app.subtitle || '';
-    if (app.search_placeholder) input.placeholder = app.search_placeholder;
+    if (app.search_placeholder) setSearchPlaceholder(app.search_placeholder);
 
     SCOPE_HOSTS = {};
     SOURCES_BY_HOST = {};
@@ -1500,7 +1573,7 @@
         el.innerHTML = '<em>No content available for this document.</em>';
         return true;
       }
-      el.innerHTML = highlightBody(data.content, currentQuery);
+      el.innerHTML = highlightBody(data.content, searchMode === 'advanced' ? advancedWords(currentQuery) : currentQuery);
       if (data.length > data.content.length) {
         const note = document.createElement('p');
         note.innerHTML = `<em>Showing the first ${data.content.length.toLocaleString()} of ${data.length.toLocaleString()} characters. The rest is in the original file.</em>`;
@@ -1511,6 +1584,17 @@
       el.innerHTML = `<em>Couldn't load this document's text: ${escapeHtml(err.message)}</em>`;
       return false;
     }
+  }
+
+  // The words an advanced search looks for, without its fields and operators.
+  function advancedWords(query) {
+    return (query || '')
+      .replace(/[\[{][^\]}]*[\]}]/g, ' ')
+      .replace(/\b(attachment|email_attachments)\s*:\s*(true|false)\b/gi, ' ')
+      .replace(/[^\s:()"]+\s*:/g, ' ')
+      .replace(/\b(AND|OR|NOT|TO)\b|&&|\|\|/g, ' ')
+      .replace(/[\^~]\d*\.?\d*/g, ' ')
+      .replace(/[()"+!*?\\]|(^|\s)-/g, ' ');
   }
 
   function highlightBody(text, query) {
@@ -1795,7 +1879,9 @@
 
       if (data.error) {
         metaRow.innerHTML = `<span class="status-dot err"></span>Search failed: ${escapeHtml(data.error)}`;
-        resultsEl.innerHTML = `<div class="empty-state"><div class="big">// error</div>Could not reach the search index. Check that OpenSearch is running.</div>`;
+        resultsEl.innerHTML = res.status === 400
+          ? `<div class="empty-state"><div class="big">// check the search</div>${escapeHtml(data.error)}${searchMode === 'advanced' ? ' <a href="/help#advanced" target="_blank" rel="noopener">See the syntax</a>.' : ''}</div>`
+          : `<div class="empty-state"><div class="big">// error</div>Could not reach the search index. Check that OpenSearch is running.</div>`;
         pager.style.display = 'none';
         return;
       }
@@ -1856,9 +1942,10 @@
   // The main search, set aside while a collection has the search box and filters.
   let mainSearch = null;
 
-  function setSearchInputs({ query, rows, logic, scope, mode }) {
-    setSearchMode(mode);
+  function setSearchInputs({ query, lines, rows, logic, scope, mode }) {
     input.value = query;
+    setSearchMode(mode);
+    fillQueryArea(lines);
     currentQuery = query;
     filterRows = rows;
     filterLogic = logic;
@@ -2327,7 +2414,7 @@
   // A collection, or documents like it, in the results list.
   function renderBanner() {
     collectionBanner.hidden = false;
-    input.placeholder = `Search in ${openCollection.name}…`;
+    setSearchPlaceholder(`Search in ${openCollection.name}…`);
     document.getElementById('searchEverything').hidden = false;
     timelineEl.hidden = collectionView !== 'timeline';
     applyTimelineCards();
@@ -2411,7 +2498,7 @@
   function showCollection(c, start) {
     const switched = !openCollection || openCollection.id !== c.id;
     if (!openCollection) {
-      mainSearch = { query: input.value, rows: filterRows, logic: filterLogic, scope: searchScope, mode: searchMode };
+      mainSearch = { query: input.value, lines: queryArea.value, rows: filterRows, logic: filterLogic, scope: searchScope, mode: searchMode };
     }
     if (switched) setSearchInputs(emptySearch());
     openCollection = c;
@@ -2472,6 +2559,8 @@
   const TIMELINE_EXPAND_KEY = 'frogmouth.timelineExpand';
   let timelineCardsWay = loadPref(TIMELINE_CARDS_KEY) === 'horizontal' ? 'horizontal' : 'vertical';
   let timelineExpanded = loadPref(TIMELINE_EXPAND_KEY) === '1';
+  const TIMELINE_HINTS_KEY = 'frogmouth.timelineHints';
+  let timelineHints = loadPref(TIMELINE_HINTS_KEY) === '1';
   let focusedCard = null;
   let cardTextObserver = null;
   let focusQueued = false;
@@ -2853,7 +2942,7 @@
         <div class="timeline-actions">
           ${steps.previous ? `<button type="button" class="timeline-previous" title="The previous ${periodUnit} with documents">&larr; ${periodName(steps.previous)}</button>` : ''}
           ${steps.next ? `<button type="button" class="timeline-next" title="The next ${periodUnit} with documents">${periodName(steps.next)} &rarr;</button>` : ''}
-          ${[['squares', 'Squares'], ['bars', 'Bars']].map(([shape, label]) =>
+          ${[['squares', 'Calendar Heatmap'], ['bars', 'Bars']].map(([shape, label]) =>
             `<button type="button" data-shape="${shape}" class="${shape === timelineShape ? 'active' : ''}">${label}</button>`).join('')}
           ${timelineRange ? `<button type="button" class="timeline-back">&larr; Back</button>
             <button type="button" class="timeline-reset">Reset View</button>` : ''}
@@ -2861,6 +2950,7 @@
           ${[['vertical', 'Vertical'], ['horizontal', 'Horizontal']].map(([way, label]) =>
             `<button type="button" data-cards="${way}" class="${way === timelineCardsWay ? 'active' : ''}" title="Which way the cards below run">${label}</button>`).join('')}
           <button type="button" class="timeline-expand ${timelineExpanded ? 'active' : ''}" title="Open every card, with its details and text">${timelineExpanded ? 'Collapse cards' : 'Expand cards'}</button>
+          <button type="button" class="timeline-hints-btn ${timelineHints ? 'active' : ''}" aria-expanded="${timelineHints}" title="How to use this chart">Hints</button>
         </div>
       </div>`;
     timelineEl.querySelectorAll('[data-cards]').forEach(b => b.addEventListener('click', () => {
@@ -2903,6 +2993,19 @@
       + ' To jump through time, hold the middle mouse button on the diamond and drag.'
       + (timelineCardsWay === 'horizontal' ? ' To move along the cards, hold the middle mouse button and drag.' : '');
     timelineEl.appendChild(note);
+    // Every hint together, out of the way until asked for.
+    const hints = document.createElement('div');
+    hints.className = 'timeline-hints';
+    hints.hidden = !timelineHints;
+    hints.append(...timelineEl.querySelectorAll('.timeline-hint'));
+    timelineEl.appendChild(hints);
+    timelineEl.querySelector('.timeline-hints-btn').addEventListener('click', e => {
+      timelineHints = !timelineHints;
+      savePref(TIMELINE_HINTS_KEY, timelineHints ? '1' : '0');
+      hints.hidden = !timelineHints;
+      e.currentTarget.classList.toggle('active', timelineHints);
+      e.currentTarget.setAttribute('aria-expanded', String(timelineHints));
+    });
     const focusLine = document.createElement('div');
     focusLine.className = 'timeline-focus';
     focusLine.setAttribute('aria-live', 'polite');
@@ -3234,7 +3337,7 @@
     collectionView = null;
     collectionBanner.hidden = true;
     timelineEl.hidden = true;
-    input.placeholder = (CONFIG.app && CONFIG.app.search_placeholder) || 'Search…';
+    setSearchPlaceholder((CONFIG.app && CONFIG.app.search_placeholder) || 'Search…');
     document.getElementById('searchEverything').hidden = true;
     applyTimelineCards();
     resetTimelineZoom();

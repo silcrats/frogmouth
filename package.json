@@ -1,11 +1,14 @@
 {
   "name": "frogmouth-search",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Config-driven, LDAP-authenticated search UI for an OpenSearch index, with pluggable file downloads.",
   "license": "Apache-2.0",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test --test-concurrency=2 \"tests/unit/*.test.js\" \"tests/api/*.test.js\"",
+    "test:browser": "node --test --test-concurrency=1 \"tests/browser/*.test.js\"",
+    "test:all": "npm test && npm run test:browser"
   },
   "engines": {
     "node": ">=22.13"
@@ -16,5 +19,8 @@
     "js-yaml": "^5.5.0",
     "ldapjs": "^3.0.7",
     "yazl": "^3.3.1"
+  },
+  "devDependencies": {
+    "playwright-core": "^1"
   }
 }
