@@ -98,16 +98,83 @@
   <p><span class="ui">Search in:</span> under the search box limits results to one source<span id="sourceList"></span>. <span class="ui">All</span> searches everything.</p>
 
   <section data-needs="vector">
-    <h2 id="modes">Keyword, semantic and hybrid search</h2>
+    <h2 id="modes">Keyword, semantic, hybrid and advanced search</h2>
     <p>The <span class="ui">Mode</span> switch under the search box changes how your words are matched:</p>
     <table>
       <tr><th>Mode</th><th>Finds</th><th>Best for</th></tr>
       <tr><td><span class="ui">Keyword</span></td><td>Documents containing your words.</td><td>Names, reference and invoice numbers, file names, exact phrases.</td></tr>
       <tr><td><span class="ui">Semantic</span></td><td>Documents closest in meaning to what you typed, even if they use different words.</td><td>Questions in plain language, e.g. <code>how do we handle a data breach</code>, or when you don't know the exact terms.</td></tr>
       <tr><td><span class="ui">Hybrid</span></td><td>Both, ranked together.</td><td>Everyday searching: exact matches still rank well, and related documents turn up too.</td></tr>
+      <tr><td><span class="ui">Advanced</span></td><td>Exactly what your <a href="#advanced">query</a> says, using fields and operators.</td><td>Precise searches, e.g. <code>from:alice AND subject:budget</code>.</td></tr>
     </table>
     <div class="tip">Semantic search looks for what your words <em>mean</em>, so it can't follow instructions like "not PDFs" or "from 2019". Type only the topic, and use <a href="#filters">filters</a> for file type, dates and the like.</div>
     <p>In semantic mode every document is some distance from your search, so the number of results counts everything ranked, not just close matches. The order is what matters: the closest are at the top.</p>
+
+    <h3 id="advanced">Advanced search syntax</h3>
+    <p>Advanced mode takes Lucene query syntax. Filters, collections and your access to documents all still apply, and it's available whether or not vector search is on.</p>
+    <table>
+      <tr><th>To find</th><th>Type</th></tr>
+      <tr><td>Both words (the default)</td><td><code>budget review</code> or <code>budget AND review</code></td></tr>
+      <tr><td>Either word</td><td><code>budget OR forecast</code></td></tr>
+      <tr><td>Without a word</td><td><code>budget NOT draft</code> or <code>budget -draft</code></td></tr>
+      <tr><td>An exact phrase</td><td><code>"budget review"</code></td></tr>
+      <tr><td>Words near each other</td><td><code>"budget review"~5</code></td></tr>
+      <tr><td>Grouped choices</td><td><code>(budget OR forecast) AND 2001</code></td></tr>
+      <tr><td>In one field</td><td><code>subject:budget</code>, <code>from:(alice OR bob)</code></td></tr>
+      <tr><td>Wildcards, not at the start of a word</td><td><code>repor*</code>, <code>te?t</code></td></tr>
+      <tr><td>Similar spellings</td><td><code>recieve~</code></td></tr>
+      <tr><td>A date, or a range of dates or sizes</td><td><code>date:2001-12</code>, <code>date:[2001-01-01 TO 2001-12-31]</code>, <code>size:&gt;=1000000</code></td></tr>
+      <tr><td>A word counting for more</td><td><code>budget^3 review</code></td></tr>
+    </table>
+    <p>Fields: <code>content</code> or <code>body</code>, <code>title</code>, <code>file</code>, <code>type</code>, <code>share</code>, <code>source</code>, <code>date</code>, <code>modified</code>, <code>size</code>, <code>from</code>, <code>to</code>, <code>cc</code>, <code>subject</code>, <code>attachment</code>, <code>thread</code>. Other fields can't be searched. <code>title</code> is usually the file name. Thread ids need quotes, as they start with <code>&lt;</code>, which would otherwise mean "less than".</p>
+    <p>A long search can run over several lines: press <span class="ui">Shift+Enter</span> for a new line, or paste one in, and <span class="ui">Enter</span> searches. Line breaks count as spaces. The other modes keep their one-line box.</p>
+    <h4>Examples</h4>
+    <table id="advanced-examples">
+      <tr><th colspan="2">Words and phrases</th></tr>
+      <tr><td><code>budget review</code></td><td>Both words, anywhere in the document</td></tr>
+      <tr><td><code>budget OR forecast</code></td><td>Either word</td></tr>
+      <tr><td><code>budget NOT draft</code></td><td>The first word without the second</td></tr>
+      <tr><td><code>"quarterly budget review"</code></td><td>That exact phrase</td></tr>
+      <tr><td><code>"budget review"~5</code></td><td>Both words within about five words of each other</td></tr>
+      <tr><td><code>(budget OR forecast) AND (review OR meeting)</code></td><td>One from each group</td></tr>
+      <tr><td><code>budget^3 review</code></td><td>Both words, ranking "budget" matches higher</td></tr>
+      <tr><th colspan="2">Wildcards and spelling</th></tr>
+      <tr><td><code>repor*</code></td><td>report, reports, reporting and so on</td></tr>
+      <tr><td><code>organi?ation</code></td><td>organisation or organization</td></tr>
+      <tr><td><code>recieve~</code></td><td>Similar spellings, such as receive</td></tr>
+      <tr><td><code>subject:invoic*</code></td><td>Subjects with invoice, invoices or invoicing</td></tr>
+      <tr><th colspan="2">Email</th></tr>
+      <tr><td><code>from:alice</code></td><td>Sent by someone called alice, or from an address containing it</td></tr>
+      <tr><td><code>from:alice AND to:bob</code></td><td>Sent by alice to bob</td></tr>
+      <tr><td><code>from:(alice OR bob)</code></td><td>Sent by either</td></tr>
+      <tr><td><code>cc:carol NOT to:carol</code></td><td>Copied to carol, but not addressed to them</td></tr>
+      <tr><td><code>subject:"board meeting"</code></td><td>That phrase in the subject</td></tr>
+      <tr><td><code>attachment:true</code></td><td>Emails with an attachment</td></tr>
+      <tr><td><code>attachment:false</code></td><td>Emails with no attachment. Other files aren't included</td></tr>
+      <tr><td><code>attachment:"true"</code></td><td>An attachment with "true" in its name</td></tr>
+      <tr><td><code>subject:budget AND attachment:xlsx</code></td><td>About a budget, with a spreadsheet attached</td></tr>
+      <tr><td><code>from:alice AND date:[2001-01-01 TO 2001-03-31]</code></td><td>Sent by alice in the first quarter of 2001</td></tr>
+      <tr><td><code>thread:"&lt;abc123@example.com&gt;"</code></td><td>One email thread, by the id shown in an email's details</td></tr>
+      <tr><th colspan="2">Files</th></tr>
+      <tr><td><code>title: budget</code></td><td>"budget" in the title, which is usually the file name</td></tr>
+      <tr><td><code>file:budget</code></td><td>"budget" in the file name</td></tr>
+      <tr><td><code>type:pdf AND budget</code></td><td>PDFs that mention budget</td></tr>
+      <tr><td><code>(type:pdf OR type:docx) AND contract</code></td><td>PDF or Word documents that mention contract</td></tr>
+      <tr><td><code>body:budget NOT file:budget</code></td><td>Mentioned in the text, but not in the file name</td></tr>
+      <tr><td><code>share:finance AND type:xlsx</code></td><td>Spreadsheets in one share</td></tr>
+      <tr><th colspan="2">Dates and sizes (dates are ISO format only: 2001, 2001-12 or 2001-12-31)</th></tr>
+      <tr><td><code>date:2001</code></td><td>Dated in 2001</td></tr>
+      <tr><td><code>date:2001-12</code></td><td>Dated in December 2001</td></tr>
+      <tr><td><code>date:2001-12-31</code></td><td>Dated on that day</td></tr>
+      <tr><td><code>date:[2001-05 TO 2001-08]</code></td><td>Dated from the start of May to the end of August 2001</td></tr>
+      <tr><td><code>date:[2001-01-01 TO 2001-12-31]</code></td><td>Dated in 2001</td></tr>
+      <tr><td><code>date:&gt;=2020-01-01</code></td><td>Dated 2020 or later</td></tr>
+      <tr><td><code>date:{* TO 2001-01-01}</code></td><td>Dated before 2001</td></tr>
+      <tr><td><code>modified:[2024-01-01 TO *]</code></td><td>Changed since the start of 2024</td></tr>
+      <tr><td><code>size:&gt;=10000000</code></td><td>10 MB or larger</td></tr>
+      <tr><td><code>type:pdf AND size:[1000000 TO 5000000]</code></td><td>PDFs of between 1 and 5 MB</td></tr>
+    </table>
+    <div class="tip">Operators need capitals: <code>and</code> is just a word. A space after a field's colon makes no difference: <code>title: budget</code> and <code>title:budget</code> are the same. To search for a colon or slash, as in a path or a time, put the term in quotes: <code>"12:30"</code>. Regular expressions and wildcards at the start of a word aren't available, as they're slow on an index this size. <code>a OR NOT b</code> doesn't add everything without b: it finds the same as <code>a</code>.</div>
   </section>
 
   <h2 id="results">Reading results</h2>
@@ -121,7 +188,7 @@
   <p>Use <span class="ui">Show</span> to choose from 10 to 1,000 results per page (larger pages take longer to load), and <span class="ui">Previous page</span> / <span class="ui">Next page</span> at the bottom to move between pages.</p>
 
   <h2 id="filters">Narrowing results with filters</h2>
-  <p>Click <span class="ui">Filters</span> under the search box, then <span class="ui">+ Add filter</span>. Each filter row has three parts:</p>
+  <p>Click <span class="ui">+ Add filter</span> under the search box. Each filter row has three parts:</p>
   <ol>
     <li><strong>What to filter on</strong><span id="filterList"></span>.</li>
     <li><span class="ui">is</span> or <span class="ui">is not</span>. <span class="ui">is not</span> leaves out whatever matches, e.g. <em>File type is not pdf</em>.</li>
@@ -129,7 +196,7 @@
   </ol>
   <p>With two or more <span class="ui">is</span> filters, choose <span class="ui">ALL (AND)</span> to require every one, or <span class="ui">ANY (OR)</span> for results matching at least one. <span class="ui">is not</span> filters always apply either way.</p>
   <div class="tip"><strong>Example:</strong> Word documents or spreadsheets, but never PDFs: add <em>File type is doc</em> and <em>File type is xls</em>, choose <span class="ui">ANY (OR)</span>, and add <em>File type is not pdf</em>.</div>
-  <p><strong>Date range</strong> is one of the filters: choose it, then fill in a day, month and year for either end or both. <span class="ui">is</span> keeps results dated within the range, and <span class="ui">is not</span> leaves those out, so results with no date stay in. You can add several, for example to leave out two different periods. <span class="ui">Clear all filters</span> removes them all. The number next to <span class="ui">Filters</span> shows how many are active.</p>
+  <p><strong>Date range</strong> is one of the filters: choose it, then fill in a day, month and year for either end or both. <span class="ui">is</span> keeps results dated within the range, and <span class="ui">is not</span> leaves those out, so results with no date stay in. You can add several, for example to leave out two different periods. <span class="ui">Clear all filters</span> removes them all. The number next to <strong>Filters</strong> shows how many are active.</p>
 
   <h2 id="collections">Collections</h2>
   <p>A collection is your own list of documents, for example everything you've found for a project. Only you can see your collections.</p>
@@ -155,13 +222,14 @@
   <h3>Seeing a collection on a timeline</h3>
   <p>Open a collection and choose <span class="ui">Timeline</span> in the bar above its documents. A chart shows when its documents are dated, and the list below runs oldest first. Choose how the chart looks; your choice is remembered in this browser:</p>
   <ul>
-    <li><span class="ui">Squares</span> gives each period a square, with darker to brighter shades for more documents, and the legend shows the scale. Up to a year, it's one square per day, with a hexagon on the last day of each month to show where months end. Longer spans get a row per year with a square per month, or a row per decade with a square per year. Shades compare periods within the chart you're looking at, so hover over a square for its exact count.</li>
+    <li><span class="ui">Calendar Heatmap</span> gives each period a square, with darker to brighter shades for more documents, and the legend shows the scale. Up to a year, it's one square per day, with a hexagon on the last day of each month to show where months end. Longer spans get a row per year with a square per month, or a row per decade with a square per year. Shades compare periods within the chart you're looking at, so hover over a square for its exact count.</li>
     <li><span class="ui">Bars</span> gives each day, month, year or decade a bar, which makes amounts easier to compare.</li>
   </ul>
-  <p>Click a square or bar, or drag across several, to zoom in: the chart and the list then cover just that period, in finer detail where possible. On a phone, tap to zoom; swiping scrolls. Stretches with no documents don't zoom. In the squares chart you can also click a decade or year at the left of a row, or a month name above a year of days, to open just that period.</p>
+  <p>Click a square or bar, or drag across several, to zoom in: the chart and the list then cover just that period, in finer detail where possible. On a phone, tap to zoom; swiping scrolls. Stretches with no documents don't zoom. In the calendar heatmap you can also click a decade or year at the left of a row, or a month name above a year of days, to open just that period.</p>
   <p>While you're looking at one whole day, month, year or decade, buttons named after the periods either side of it, such as <span class="ui">&larr; 1997</span> and <span class="ui">2001 &rarr;</span>, move you along. They skip periods with no documents. <span class="ui">Back</span> returns to the view you zoomed in from, and <span class="ui">Reset View</span> returns to the whole timeline.</p>
   <p>Choose <span class="ui">Vertical</span> or <span class="ui">Horizontal</span> for which way the cards run. Horizontal is a row under the chart, so both stay in view. To move along it, hold the middle mouse button and drag: a faster drag goes further, and the row coasts on after you let go. You can also use its scrollbar, click a card, or use the large arrows at each end of the row or the left and right arrow keys. The scroll wheel scrolls the page as usual. <span class="ui">Previous page</span> and <span class="ui">Next page</span> show the next batch of documents. <span class="ui">Expand cards</span> opens every card, and loads each one's text as you reach it. Your choices are remembered in this browser.</p>
   <p>A yellow diamond marks the date of the card in focus on the chart, and the card has a yellow outline. In focus means nearest the middle of the row or of the window, or the card you've tabbed to. In the vertical layout, the chart stays at the top of the window as you scroll, if there's room. A document with no date has no place on the chart, so the line under it says so. To jump through time, hold the middle mouse button on the diamond and drag it along the chart. The cards follow as you go, and if a date is on another page, that page opens when you let go. The chart's dates are in UTC, while cards show your local time, so the two can differ by a day.</p>
+  <p><span class="ui">Hints</span> shows short reminders of how to use the chart, including that its dates are in UTC.</p>
   <p>Each document's date is labelled <em>Sent</em>, <em>Taken</em> or <em>Modified</em> to show what it means. A modified date can be later than when a document was really written, and documents with no usable date are listed last.</p>
   <h3>Working on a board</h3>
   <p>Open a collection and choose <span class="ui">Board</span> in the bar above its documents. A board is a large canvas for laying out a collection's documents and how they relate, like an evidence board. Each collection has one, and it saves itself as you work.</p>

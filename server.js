@@ -1,7 +1,8 @@
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
-const { loadConfig, publicConfig, SEARCH_MODES } = require('./lib/config');
+const { loadConfig, publicConfig, SEARCH_MODES, VECTOR_MODES } = require('./lib/config');
+const { rewriteLucene, luceneFields } = require('./lib/lucene');
 const { createLdapAuth } = require('./lib/auth/ldap');
 const { createSmbDownloader, contentDisposition } = require('./lib/downloaders/smb');
 const { createOpenSearchClient } = require('./lib/opensearch');
@@ -170,7 +171,11 @@ function toIsoDate(dateStr, endOfDay) {
 
 async function osSearch(body) {
   const res = await opensearch.request('POST', `/${encodeURIComponent(SEARCH_INDEX)}/_search`, body);
-  if (!res.ok) throw new Error(`OpenSearch error ${res.status}: ${res.text}`);
+  if (!res.ok) {
+    const err = new Error(`OpenSearch error ${res.status}: ${res.text}`);
+    err.opensearchStatus = res.status;
+    throw err;
+  }
   const data = JSON.parse(res.text);
   // A shard that fails still leaves a 200 with the full hit count, just
   // without that shard's documents -- log why, rather than lose them quietly.
@@ -303,9 +308,36 @@ function parseFilterParams(req) {
 function searchMode(req, q) {
   const mode = queryParam(req, 'mode') || 'keyword';
   if (!SEARCH_MODES.includes(mode)) throw new BadRequest('Invalid mode parameter');
-  if (mode !== 'keyword' && !config.vector.enabled) throw new BadRequest('Vector search is not enabled');
+  if (VECTOR_MODES.includes(mode) && !config.vector.enabled) throw new BadRequest('Vector search is not enabled');
   // A blank q has no meaning to compare against: browse as keyword does.
   return q ? mode : 'keyword';
+}
+
+const LUCENE_FIELDS = luceneFields(config);
+
+// What's typed in Advanced mode, as a query. It sits inside the bool that holds
+// the role filter, so it can only ever narrow what the user may see.
+function advancedQuery(text) {
+  return {
+    query_string: {
+      query: rewriteLucene(text, LUCENE_FIELDS),
+      fields: config.search_fields,
+      default_operator: 'AND',
+      allow_leading_wildcard: false,
+      lenient: true,
+      fuzzy_max_expansions: 20,
+      max_determinized_states: 2000,
+    }
+  };
+}
+
+// A query that passed the checks here can still be one OpenSearch can't parse
+// ("a AND", say). That's the user's to correct, not a failure of the index.
+function sendSearchError(req, res, err, message) {
+  if (queryParam(req, 'mode') === 'advanced' && err.opensearchStatus === 400) {
+    return res.status(400).json({ error: 'OpenSearch couldn\'t read that search. Check its operators, such as an AND with nothing after it.' });
+  }
+  return res.status(502).json({ error: message, detail: err.message });
 }
 
 function semanticQuery(text, filterBool) {
@@ -399,7 +431,7 @@ function buildSearchQuery(req, depth = config.vector.k, collectionId) {
   filterBool.push(...collectionFilter(req, collectionId));
   const mode = searchMode(req, q);
 
-  const textMatch = q ? {
+  const textMatch = mode === 'advanced' ? advancedQuery(qRaw) : q ? {
     multi_match: {
       query: q,
       type: phraseSearch ? 'phrase' : 'best_fields',
@@ -429,12 +461,12 @@ app.get('/api/search', requireAuth, async (req, res) => {
   };
 
   try {
-    const data = await osSearch(body);
+    const data = await osSearch(mode === 'advanced' ? { ...body, timeout: '30s' } : body);
     const partial = Boolean(data._shards && data._shards.failed);
     res.json({ ...resultPage(data.hits.hits, start, data.hits.total.value), partial, mode });
   } catch (err) {
     console.error('Search error:', err.message);
-    res.status(502).json({ error: 'Search failed', detail: err.message });
+    sendSearchError(req, res, err, 'Search failed');
   }
 });
 
@@ -594,7 +626,7 @@ app.post('/api/collections/:id/items/from-search', requireAuth, async (req, res)
     res.status(201).json({ ...result, more: data.hits.total.value > data.hits.hits.length });
   } catch (err) {
     console.error('Add search results error:', err.message);
-    res.status(502).json({ error: 'Could not add the results', detail: err.message });
+    sendSearchError(req, res, err, 'Could not add the results');
   }
 });
 
@@ -650,7 +682,7 @@ app.get('/api/collections/:id/timeline', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('Timeline error:', err.message);
-    res.status(502).json({ error: 'Could not load the timeline', detail: err.message });
+    sendSearchError(req, res, err, 'Could not load the timeline');
   }
 });
 

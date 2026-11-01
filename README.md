@@ -32,7 +32,7 @@ so it can front any index that carries per-document roles.
   on disk, and find more like them by keyword or, with vector search, by
   meaning (using the description too). Shown on top of the results or
   docked at the left or right of wide windows. A timeline view charts a
-  collection's documents by date, as shaded squares or bars; click or drag
+  collection's documents by date, as a calendar heatmap or bars; click or drag
   the chart to zoom in. Its cards run down or across, can all be expanded, and
   a diamond marks the focused card on the chart. A collection's files can be
   downloaded as one zip. Search and filters work inside an open collection.
@@ -155,3 +155,14 @@ it before you deploy it.
 
 Licensed under the [Apache License, Version 2.0](LICENSE). See [NOTICE](NOTICE)
 for attribution.
+
+## Tests
+
+```
+npm ci
+npm test              # unit and API tests, with stand-ins for LDAP and OpenSearch
+npm run test:browser  # the page in a real browser (Chromium or Chrome; set CHROME to choose)
+npm run test:all      # both
+```
+
+Tests use only the made-up documents in `tests/support/fixtures.js`, and need no services running. They run on every pull request. The stand-in OpenSearch understands only enough of the query language for the tests, so real query behaviour still has to be checked against a real index.
