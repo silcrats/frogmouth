@@ -18,7 +18,7 @@
   const MAX_SECTIONS = 100;  // lib/board.js allows more, but past this they don't help
   const ARRANGEMENTS = [['', 'No sections'], ['date', 'Date'], ['subject', 'Subject'], ['sender', 'Sender'], ['type', 'File type']];
   const MAX_BOARD_CONNECTIONS = 3000;
-  const MAX_BOARD_GROUPS = 200;  // lib/board.js refuses to save more
+  const MAX_BOARD_GROUPS = 1000;  // lib/board.js refuses to save more
   const MAX_DISMISSED = 5000;
   const COLLAPSED_W = 220;
   const COLLAPSED_H = 40;

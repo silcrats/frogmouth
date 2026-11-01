@@ -63,5 +63,5 @@ test('limits how many of each a board can hold', () => {
   const note = i => ({ id: `n${i}`, kind: 'note', x: 0, y: 0 });
   assert.equal(cleanBoard({ objects: Array.from({ length: 5500 }, (_, i) => note(i)) }).objects.length, 5500);
   assert.throws(() => cleanBoard({ objects: Array.from({ length: 5501 }, (_, i) => note(i)) }), /up to 5500/);
-  assert.throws(() => cleanBoard({ groups: Array.from({ length: 201 }, (_, i) => ({ id: `g${i}`, x: 0, y: 0, w: 200, h: 200 })) }), /200 groups/);
+  assert.throws(() => cleanBoard({ groups: Array.from({ length: 1001 }, (_, i) => ({ id: `g${i}`, x: 0, y: 0, w: 200, h: 200 })) }), /1000 groups/);
 });

@@ -305,7 +305,7 @@ test('the board', async t => {
 
   await t.test('a full board of groups stops at the limit', async () => {
     const d = await makeCollection(page, 'Cap');
-    const groups = Array.from({ length: 198 }, (_, i) => ({ id: `g${i}`, x: -5000 - i * 200, y: 0, w: 160, h: 100, title: `G${i}`, collapsed: true }));
+    const groups = Array.from({ length: 998 }, (_, i) => ({ id: `g${i}`, x: -5000 - i * 200, y: 0, w: 160, h: 100, title: `G${i}`, collapsed: true }));
     const objects = d.ids.map((id, i) => ({ id: `d${i}`, kind: 'doc', doc_id: id, x: i * 240, y: 0 }));
     await api(page, 'PUT', `/api/collections/${d.id}/board`, { revision: 0, board: { objects, groups } });
     await openCollection(page, 'Cap');
@@ -318,10 +318,10 @@ test('the board', async t => {
     assert.equal(await apply.textContent(), 'Apply 2 groups');
     await apply.click();
     await saved(page);
-    assert.equal(await page.locator('.board-group').count(), 200);
+    assert.equal(await page.locator('.board-group').count(), 1000);
     await inspector.locator('.board-tray-head button').click();
     await bar.getByRole('button', { name: 'Group' }).first().click();
-    assert.equal(await page.locator('.board-group').count(), 200);
+    assert.equal(await page.locator('.board-group').count(), 1000);
     await bar.getByRole('button', { name: 'Close' }).click();
     await page.waitForSelector('.board', { state: 'detached' });
   });

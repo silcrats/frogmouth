@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { suggestBoard, meaningPairs } = require('../../lib/board-suggest');
+const { suggestBoard, meaningPairs, keepBestTopics } = require('../../lib/board-suggest');
 
 let seed = 11;
 const random = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296 - 0.5;
@@ -97,7 +97,7 @@ test('no kind crowds out the rest of the suggestions', () => {
   for (let i = 0; i < 900; i++) cards.push({ id: `c${i}`, time: i, group: null, text: `${'word '.repeat(60)}${i % 3 === 0 ? 'same' : i}`, vector: unit(randomVector()), doc: { id: `smb://s/x/${i}`, filename: `f${i % 2}.pdf` } });
   const { connections, connections_total: total } = suggestBoard({ cards });
   const kinds = new Set(connections.map(c => c.kind));
-  assert.ok(connections.length <= 300);
+  assert.ok(connections.length <= 1000);
   assert.ok(total >= connections.length);
   assert.ok(kinds.size >= 2);
 });
@@ -214,8 +214,8 @@ test('topics can offer as many groups as a board holds', () => {
   assert.equal(some.left_out, 0);
   assert.ok(some.groups.every(g => g.quality), 'all rated');
   const many = topics(230);
-  assert.equal(many.groups.length, 200);
-  assert.equal(many.left_out, 30);
+  assert.equal(many.groups.length, 230);
+  assert.equal(many.left_out, 0);
 });
 
 const emailCard = (id, body, extra = {}) => ({ id, time: 1, group: null, text: `Subject: s${id}\n\n${body}`, doc: { id: `smb://s/${id}`, email_from: 'john.delainey@x.example', email_subject: `s${id}`, ...extra } });
@@ -276,4 +276,36 @@ test('a large, loose topic is split, and a tight one is left whole', () => {
   const biggest = cards => Math.max(...suggestBoard({ cards }).groupings.find(g => g.key === 'topic').groups.map(g => g.members.length));
   assert.ok(biggest(loose) < 80, `loose stayed at ${biggest(loose)}`);
   assert.ok(biggest(tight) >= 40, 'tight stays together');
+});
+
+test('when topics must be cut, the clearest are kept, whatever their size', () => {
+  const g = (name, rating, size, extra = {}) => ({ title: name, members: Array(size).fill(0), quality: { rating }, ...extra });
+  const groups = [g('loose', 'unclear', 90), g('few', 'too_few', 60), g('some', 'some', 40), g('clear', 'clear', 20), g('tight', 'near_identical', 5), g('notes', 'some', 30, { short: true })];
+  assert.deepEqual(keepBestTopics(groups, 4).map(x => x.title), ['some', 'notes', 'clear', 'tight'], 'biggest first in the list');
+  assert.equal(keepBestTopics(groups, 6), groups, 'nothing cut, nothing changed');
+});
+
+const mailCard = (id, subject, body, from = `s${id}@x.example`) => ({ id, time: 1, group: null, text: `Subject: ${subject}\n\n${body}`, doc: { id: `smb://s/${id}`, email_subject: subject, email_from: from } });
+
+test('Same subject collects emails with one subject, with no one else in common', () => {
+  const cards = [
+    mailCard('a', 'Ontario NUG Contract Management', 'first text here'),
+    mailCard('b', 'RE: Ontario NUG Contract Management', 'second text here'),
+    mailCard('c', 'Fwd: ontario nug contract management', 'third text here'),
+    mailCard('d', 'Weekly gas review', 'fourth'),
+    mailCard('e', 'Weekly gas review', 'fifth'),
+    mailCard('f', 'One of a kind', 'sixth'),
+  ];
+  const subject = suggestBoard({ cards }).groupings.find(g => g.key === 'subject');
+  assert.deepEqual(subject.groups.map(g => [g.title, g.members]), [['Ontario NUG Contract Management', ['a', 'b', 'c']], ['Weekly gas review', ['d', 'e']]]);
+  assert.equal(suggestBoard({ cards: cards.map(c => ({ ...c, group: 'g' })) }).groupings.some(g => g.key === 'subject'), false, 'grouped cards stay');
+});
+
+test('every set of copies gets a connection before any set gets a second', () => {
+  const body = i => `this is the unique shared text of message number ${i} and it goes on for a while. `.repeat(5);
+  const big = Array.from({ length: 1100 }, (_, i) => mailCard(`big${i}`, `Big ${i}`, body('big')));
+  const small = Array.from({ length: 5 }, (_, s2) => [0, 1].map(k => mailCard(`small${s2}x${k}`, `Small ${s2}`, body(`small${s2}`)))).flat();
+  const copies = suggestBoard({ cards: [...big, ...small] }).connections.filter(c => c.kind === 'copy');
+  assert.ok(copies.length <= 1000);
+  for (let n = 0; n < 5; n++) assert.ok(copies.some(c => c.from === `small${n}x0` && c.to === `small${n}x1`), `small set ${n}`);
 });
