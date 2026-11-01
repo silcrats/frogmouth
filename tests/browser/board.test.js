@@ -393,7 +393,7 @@ test('the board', async t => {
     assert.deepEqual(overlap, { hits: 0, out: 0 });
 
     // Moving the frame takes its labels along.
-    const label = () => labels.first().evaluate(e => e.style.top);
+    const label = () => page.locator('.board-section-box').first().evaluate(e => e.style.top);
     const top = await label();
     const head = await page.locator('.board-group-title').boundingBox();
     await page.mouse.move(head.x + 5, head.y + 5);
@@ -493,6 +493,23 @@ test('the board', async t => {
     });
     assert.equal(onPage.hits, 0);
     assert.equal(onPage.labelHits, 0);
+    // Each section has a box round exactly its own cards, and boxes don't touch.
+    for (const section of g1.sections) {
+      const box = { x: g1.x + section.x, y: g1.y + section.y, w: section.w, h: section.h };
+      const mine = new Set(section.members);
+      for (const o of b.objects.filter(c => c.group === 'g1')) {
+        const inside = o.x >= box.x && o.y >= box.y && o.x + 220 <= box.x + box.w && o.y < box.y + box.h;
+        assert.equal(inside, mine.has(o.id), `${o.id} in ${section.title}`);
+      }
+      assert.ok(box.x + box.w <= g1.x + g1.w && box.y + box.h <= g1.y + g1.h, 'inside the frame');
+    }
+    assert.equal(await page.locator('.board-section-box').count(), g1.sections.length);
+    assert.equal(await page.locator('.board-section-box').first().evaluate(e => getComputedStyle(e).pointerEvents), 'none', 'the canvas still works through it');
+    for (let i = 0; i < g1.sections.length; i++) {
+      for (let j = i + 1; j < g1.sections.length; j++) {
+        assert.ok(apart(g1.sections[i], g1.sections[j]), 'boxes apart');
+      }
+    }
     assert.ok(onPage.rows < onPage.labels, `${onPage.labels} sections on ${onPage.rows} rows`);
     assert.ok(b.objects.filter(o => o.group === 'g1').every(o => o.x >= g1.x && o.y >= g1.y && o.x + 220 <= g1.x + g1.w && o.y < g1.y + g1.h));
     const cardRects = b.objects.filter(o => o.group === 'g1').map(o => `${o.x},${o.y}`);

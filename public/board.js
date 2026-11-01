@@ -12,7 +12,9 @@
   const GROUP_HEAD = 40;
   const GROUP_GAP = 20;
   const GROUP_MARGIN = 50;
-  const SECTION_H = 34;
+  const SECTION_H = 36;
+  const SECTION_PAD = 12;
+  const SECTION_GAP = 16;
   const MAX_SECTIONS = 100;  // lib/board.js allows more, but past this they don't help
   const ARRANGEMENTS = [['', 'No sections'], ['date', 'Date'], ['subject', 'Subject'], ['sender', 'Sender'], ['type', 'File type']];
   const MAX_BOARD_CONNECTIONS = 3000;
@@ -482,17 +484,21 @@
       node.appendChild(size);
       sectionsNow(g).forEach(({ section, cards, whole }) => {
         const label = el('div', 'board-section');
-        label.style.top = `${section.y}px`;
-        if (section.w) {
-          label.style.left = `${section.x}px`;
-          label.style.width = `${section.w}px`;
-        }
         label.append(el('span', 'board-section-title', section.title), el('span', 'board-group-count', String(cards.length)));
         const make = button('Make group', () => sectionToGroup(g, section), { title: 'Make this section a group of its own' });
         make.disabled = whole;
         make.addEventListener('pointerdown', e => e.stopPropagation());
         label.append(make);
-        node.appendChild(label);
+        if (section.h) {
+          const box = el('div', 'board-section-box');
+          Object.assign(box.style, { left: `${section.x}px`, top: `${section.y}px`, width: `${section.w}px`, height: `${section.h}px` });
+          box.appendChild(label);
+          node.appendChild(box);
+        } else {
+          // Laid out before sections had boxes, until it's next re-shuffled.
+          label.style.top = `${section.y}px`;
+          node.appendChild(label);
+        }
       });
     }
     node.classList.toggle('selected', s.selected.has(g.id));
@@ -1355,28 +1361,31 @@
       placeInFrame(cards, g, grid);
       return;
     }
-    // Sections side by side, in order, starting a new row when one won't fit.
+    // Boxes side by side, in order, starting a new row when one won't fit.
     const step = CARD_W + GROUP_GAP;
-    const inner = grid.cols * step - GROUP_GAP;
+    const inner = grid.cols * step - GROUP_GAP + SECTION_PAD * 2;
     let [x, y, rowHeight] = [0, GROUP_HEAD, 0];
     g.sections = sectionsFor(cards, g.arrange).map(({ title, cards: inSection }) => {
       const cols = inSection.length >= grid.cols ? grid.cols : Math.ceil(Math.sqrt(inSection.length));
-      const width = cols * step - GROUP_GAP;
+      const rows = Math.ceil(inSection.length / cols);
+      const width = cols * step - GROUP_GAP + SECTION_PAD * 2;
+      const height = SECTION_H + rows * grid.rowH - GROUP_GAP + SECTION_PAD;
       if (x && x + width > inner) {
         x = 0;
-        y += rowHeight;
+        y += rowHeight + SECTION_GAP;
         rowHeight = 0;
       }
-      const section = { id: newId(), title, x: GROUP_PAD + x, y, w: width, members: inSection.map(o => o.id) };
+      const section = { id: newId(), title, x: GROUP_PAD + x, y, w: width, h: height, members: inSection.map(o => o.id) };
       inSection.forEach((o, i) => {
-        o.x = g.x + GROUP_PAD + x + (i % cols) * step;
+        o.x = g.x + GROUP_PAD + x + SECTION_PAD + (i % cols) * step;
         o.y = g.y + y + SECTION_H + Math.floor(i / cols) * grid.rowH;
       });
-      rowHeight = Math.max(rowHeight, SECTION_H + Math.ceil(inSection.length / cols) * grid.rowH);
-      x += width + step - CARD_W;
+      rowHeight = Math.max(rowHeight, height);
+      x += width + SECTION_GAP;
       return section;
     });
-    g.h = Math.max(MIN_GROUP_H, y + rowHeight - GROUP_GAP + GROUP_PAD);
+    g.w = inner + GROUP_PAD * 2;
+    g.h = Math.max(MIN_GROUP_H, y + rowHeight + GROUP_PAD);
   }
 
   // What can be moved as one: a group and its cards, or a card in no group.
