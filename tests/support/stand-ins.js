@@ -79,6 +79,16 @@ function matches(doc, clause) {
   return true;  // match_all, and nearest-neighbour queries: everything is some distance away
 }
 
+// Pelican's whole-document vector, for tests of an index that has it.
+if (process.env.STUB_DOC_VECTORS) {
+  for (const doc of docs) {
+    if (!doc.content_embedding) continue;
+    const sum = doc.content_embedding[0].knn.map((_, i) => doc.content_embedding.reduce((t, p) => t + p.knn[i], 0));
+    const norm = Math.hypot(...sum) || 1;
+    doc.content_embedding_mean = sum.map(x => x / norm);
+  }
+}
+
 function pick(doc, fields) {
   if (!Array.isArray(fields)) return doc;
   const kept = {};

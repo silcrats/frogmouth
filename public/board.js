@@ -1595,10 +1595,10 @@
 
   // Worked out on the server from the saved board, so anything unsaved goes
   // first. Nothing changes until it's accepted, and accepting is one undo step.
-  async function openSuggestions() {
+  async function openSuggestions(similar = false) {
     const board = s;
     s.panel = null;
-    s.suggest = { loading: true };
+    s.suggest = { loading: true, similar };
     renderInspector();
     await saveNow();
     if (s !== board) return;
@@ -1606,8 +1606,16 @@
       s.suggest = { error: 'The board has to be saved first, and that isn\'t working right now.' };
       return renderInspector();
     }
+    // Says how far it's got. A failure here doesn't matter: the answer still comes.
+    const watching = setInterval(async () => {
+      const status = await collectionsApi('GET', `${boardUrl()}/suggestions/status`).catch(() => null);
+      if (s !== board || !s.suggest || !s.suggest.loading || !status || !status.stage) return;
+      s.suggest.stage = status.stage;
+      const line = s.els.inspector?.querySelector('.board-suggest-stage');
+      if (line) line.textContent = status.stage;
+    }, 700);
     try {
-      const data = await collectionsApi('GET', `${boardUrl()}/suggestions`);
+      const data = await collectionsApi('GET', `${boardUrl()}/suggestions${similar ? '?similar=1' : ''}`);
       if (s !== board || !s.suggest) return;
       s.suggest = {
         ...data,
@@ -1617,6 +1625,8 @@
     } catch (err) {
       if (s !== board || !s.suggest) return;
       s.suggest = { error: err.message };
+    } finally {
+      clearInterval(watching);
     }
     renderInspector();
   }
@@ -1646,7 +1656,11 @@
     const head = el('div', 'board-tray-head');
     head.append(el('span', 'board-panel-title', 'Suggestions'), button('Close', closeSuggestions));
     root.append(head);
-    if (data.loading) return root.append(el('p', 'board-note', 'Reading the documents on the board…'));
+    if (data.loading) {
+      root.append(el('p', 'board-note board-suggest-stage', data.stage || 'Reading the documents on the board…'));
+      if (data.similar) root.append(el('p', 'board-note', 'Comparing every document with the others can take a while on a large board.'));
+      return;
+    }
     if (data.error) return root.append(el('p', 'board-note', data.error));
     if (!data.analysed) return root.append(el('p', 'board-note', 'Put some documents on the board first. Suggestions only look at what\'s on it.'));
     const note = `Looked at ${data.analysed.toLocaleString()} document${data.analysed === 1 ? '' : 's'} on the board`
@@ -1660,6 +1674,12 @@
   function renderConnectionChoice(root, data) {
     const rows = data.connections.filter(c => objectById(c.from) && objectById(c.to) && !isConnected(c.from, c.to));
     root.append(el('div', 'board-suggest-title', `Connections (${rows.length.toLocaleString()})`));
+    if (!data.similar_included) {
+      root.append(button('Find similar documents', () => openSuggestions(true), {
+        className: 'board-suggest-similar',
+        title: 'Also compare every document with the others, by words and by meaning. It takes longer on a large board.',
+      }));
+    }
     if (!rows.length) return root.append(el('p', 'board-note', 'Nothing more to suggest. Adding a person, place, organisation or event with a title lets this look for documents that name it.'));
     const accept = button('', () => {
       const room = Math.max(0, MAX_BOARD_CONNECTIONS - s.data.connections.length);

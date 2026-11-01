@@ -146,6 +146,9 @@ vector:
   # The passages' text, in the same order as their vectors. Quoted as evidence
   # for the board's "similar meaning" suggestions.
   chunk_field: content_chunks
+  # One vector for each whole document, from Pelican 0.6 on. Documents without it
+  # still work: their passages' vectors are fetched and averaged instead.
+  doc_field: content_embedding_mean
   k: 100
   default_mode: keyword
 

@@ -1,6 +1,9 @@
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
+const os = require('os');
+const crypto = require('crypto');
+const { Worker } = require('worker_threads');
 const { loadConfig, publicConfig, SEARCH_MODES, VECTOR_MODES } = require('./lib/config');
 const { rewriteLucene, luceneFields } = require('./lib/lucene');
 const { createLdapAuth } = require('./lib/auth/ldap');
@@ -8,7 +11,6 @@ const { createSmbDownloader, contentDisposition } = require('./lib/downloaders/s
 const { createOpenSearchClient } = require('./lib/opensearch');
 const { openCollections, MAX_ITEMS } = require('./lib/collections');
 const { parseDocDate, timelineBuckets, timelineDays } = require('./lib/timeline');
-const { suggestBoard, rateGroup, closestPassages } = require('./lib/board-suggest');
 const { streamCollectionZip, safeEntryName } = require('./lib/collection-zip');
 
 const config = loadConfig();
@@ -752,27 +754,64 @@ app.delete('/api/collections/:id/board/versions/:versionId', requireAuth, (req, 
 const SUGGEST_BATCH = 100;
 // A document can have 100 passages of vectors, so these go a few at a time.
 const VECTOR_BATCH = 25;
-const boardSuggestions = new Set();  // owners with one running
+const SIGNATURE_BATCH = 500;
+// Requests to OpenSearch at once, for one person's suggestions.
+const SUGGEST_PARALLEL = 6;
+const boardSuggestions = new Map();  // owners with one running, and how far it's got
+// Running at once across everyone, each with a core to itself.
+const MAX_SUGGEST_WORKERS = Math.max(1, Math.min(4, Math.floor(os.availableParallelism() / 2)));
+const SUGGEST_WORKER_TIMEOUT_MS = 5 * 60 * 1000;
+let suggestWorkers = 0;
+
+function runSuggestWorker(task, input) {
+  suggestWorkers++;
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(path.join(__dirname, 'lib', 'board-suggest-worker.js'), { workerData: { task, input } });
+    const timer = setTimeout(() => {
+      worker.terminate();
+      reject(new Error('Board suggestions took too long'));
+    }, SUGGEST_WORKER_TIMEOUT_MS);
+    const finish = settle => value => {
+      clearTimeout(timer);
+      settle(value);
+    };
+    worker.once('message', finish(resolve));
+    worker.once('error', finish(reject));
+    worker.once('exit', code => finish(reject)(new Error(`Board suggestions stopped early (exit ${code})`)));
+  }).finally(() => { suggestWorkers--; });
+}
+
+// Calls work on each slice of ids, a few at a time.
+async function inBatches(ids, size, work) {
+  const slices = [];
+  for (let i = 0; i < ids.length; i += size) slices.push(ids.slice(i, i + size));
+  let next = 0;
+  const runner = async () => {
+    while (next < slices.length) await work(slices[next++]);
+  };
+  await Promise.all(Array.from({ length: Math.min(SUGGEST_PARALLEL, slices.length) }, runner));
+}
 
 // Calls use(id, source) for each document among ids this user can see, with
 // its vectors and any extra fields, a batch at a time so that only what use
 // keeps stays in memory.
 async function forEachVectors(req, ids, extra, use) {
   const field = config.vector.field;
-  for (let i = 0; i < ids.length; i += VECTOR_BATCH) {
+  await inBatches(ids, VECTOR_BATCH, async slice => {
     const data = await osSearch({
-      size: VECTOR_BATCH,
+      size: slice.length,
       _source: [F.id, `${field}.knn`, ...extra],
-      query: { bool: { filter: [{ terms: { [F.id]: ids.slice(i, i + VECTOR_BATCH) } }, roleFilter(req.session.user.roles)] } },
+      query: { bool: { filter: [{ terms: { [F.id]: slice } }, roleFilter(req.session.user.roles)] } },
     });
     for (const hit of data.hits.hits) use(firstValue(hit._source[F.id]), hit._source);
-  }
+  });
 }
 
 // What's shown for each "similar meaning" suggestion: the passages that matched.
 async function addPassageEvidence(req, cards, connections) {
   const { field, chunk_field: chunkField } = config.vector;
   const meaning = connections.filter(c => c.kind === 'meaning');
+  if (!meaning.length) return;
   const docOf = new Map(cards.map(card => [card.id, card.doc.id]));
   const ids = [...new Set(meaning.flatMap(c => [docOf.get(c.from), docOf.get(c.to)]))];
   const passages = new Map();
@@ -780,41 +819,50 @@ async function addPassageEvidence(req, cards, connections) {
     const texts = source[chunkField] || [];
     passages.set(id, (source[field] || []).map((p, i) => ({ vector: Float32Array.from(unitVector(p.knn)), text: texts[i] })).filter(p => p.text));
   });
-  for (const c of meaning) {
-    c.reason = closestPassages(passages.get(docOf.get(c.from)) || [], passages.get(docOf.get(c.to)) || []) || c.reason;
-  }
+  const reasons = await runSuggestWorker('evidence', {
+    pairs: meaning.map(c => [passages.get(docOf.get(c.from)) || [], passages.get(docOf.get(c.to)) || []]),
+  });
+  meaning.forEach((c, i) => { c.reason = reasons[i] || c.reason; });
 }
 
 // The documents on a board that the user can see now, as cards to analyse. Vectors
 // only improve the results, so without them it carries on.
 async function boardCards(req, onBoard) {
-  const ids = onBoard.map(o => o.doc_id);
+  const docField = config.vector.enabled ? config.vector.doc_field : null;
   const found = new Map();
-  for (let i = 0; i < ids.length; i += SUGGEST_BATCH) {
+  await inBatches(onBoard.map(o => o.doc_id), SUGGEST_BATCH, async slice => {
     const data = await osSearch({
-      size: SUGGEST_BATCH,
-      _source: SEARCH_FIELDS,
-      query: { bool: { filter: [{ terms: { [F.id]: ids.slice(i, i + SUGGEST_BATCH) } }, roleFilter(req.session.user.roles)] } },
+      size: slice.length,
+      _source: docField ? [...SEARCH_FIELDS, docField] : SEARCH_FIELDS,
+      query: { bool: { filter: [{ terms: { [F.id]: slice } }, roleFilter(req.session.user.roles)] } },
       script_fields: START_OF_TEXT,
     });
     for (const hit of data.hits.hits) {
       const doc = normalizeDoc(hit._source);
-      found.set(doc.id, { doc, text: String(((hit.fields || {}).like_text || [])[0] || ''), time: parseDocDate(hit._source[F.created]) });
+      const mean = docField && hit._source[docField];
+      found.set(doc.id, {
+        doc,
+        text: String(((hit.fields || {}).like_text || [])[0] || ''),
+        time: parseDocDate(hit._source[F.created]),
+        vector: Array.isArray(mean) && mean.length ? Float32Array.from(mean) : undefined,
+      });
     }
-  }
+  });
   const cards = onBoard.filter(o => found.has(o.doc_id)).map(o => {
-    const { doc, text, time } = found.get(o.doc_id);
-    return { id: o.id, doc, text, group: o.group, time: o.date ? Date.parse(`${o.date}T00:00:00Z`) : time };
+    const { doc, text, time, vector } = found.get(o.doc_id);
+    return { id: o.id, doc, text, group: o.group, vector, time: o.date ? Date.parse(`${o.date}T00:00:00Z`) : time };
   });
   let vectorsFailed = false;
-  if (config.vector.enabled) {
+  // Documents indexed before the whole-document vector existed, or with no text.
+  const without = cards.filter(card => !card.vector);
+  if (config.vector.enabled && without.length) {
     try {
       const means = new Map();
-      await forEachVectors(req, cards.map(c => c.doc.id), [], (id, source) => {
+      await forEachVectors(req, without.map(c => c.doc.id), [], (id, source) => {
         const vector = meanVector((source[config.vector.field] || []).map(p => p.knn));
         if (vector) means.set(id, Float32Array.from(vector));
       });
-      for (const card of cards) card.vector = means.get(card.doc.id);
+      for (const card of without) card.vector = means.get(card.doc.id);
     } catch (err) {
       vectorsFailed = true;
       console.warn('Board suggestions without vectors:', err.message);
@@ -823,38 +871,112 @@ async function boardCards(req, onBoard) {
   return { cards, vectorsFailed };
 }
 
+// The last answers worked out, so reopening an unchanged board needs no work.
+// Kept per person and collection, for an exact match on everything that decides
+// the answer: which documents they can see now and when each last changed, what
+// the board holds and says, and whether similar documents were asked for.
+const MAX_REMEMBERED_SUGGESTIONS = 20;
+const rememberedSuggestions = new Map();
+
+async function suggestionSignature(req, board, onBoard, similar) {
+  const visible = [];
+  await inBatches(onBoard.map(o => o.doc_id), SIGNATURE_BATCH, async slice => {
+    const data = await osSearch({
+      size: slice.length,
+      _source: [F.id, F.modified],
+      query: { bool: { filter: [{ terms: { [F.id]: slice } }, roleFilter(req.session.user.roles)] } },
+    });
+    for (const hit of data.hits.hits) visible.push([firstValue(hit._source[F.id]), hit._source[F.modified]]);
+  });
+  visible.sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  return crypto.createHash('sha256').update(JSON.stringify({
+    similar,
+    visible,
+    cards: onBoard.map(o => [o.id, o.doc_id, o.group, o.date]),
+    entities: board.objects.filter(o => ENTITY_KINDS.includes(o.kind) && o.title).map(o => [o.id, o.title]),
+    connections: board.connections.map(c => [c.from, c.to]),
+    dismissed: board.dismissed,
+  })).digest('hex');
+}
+
+function rememberSuggestions(key, signature, answer) {
+  rememberedSuggestions.delete(key);
+  rememberedSuggestions.set(key, { signature, answer });
+  if (rememberedSuggestions.size > MAX_REMEMBERED_SUGGESTIONS) {
+    rememberedSuggestions.delete(rememberedSuggestions.keys().next().value);
+  }
+}
+
 const unitVector = v => {
   const norm = Math.hypot(...v) || 1;
   return v.map(x => x / norm);
 };
 
+const ENTITY_KINDS = ['person', 'place', 'org', 'event'];
+
+function suggestionsBusy(owner, res, message) {
+  if (boardSuggestions.has(owner)) {
+    res.status(429).json({ error: message });
+    return true;
+  }
+  if (suggestWorkers >= MAX_SUGGEST_WORKERS) {
+    res.status(429).json({ error: 'The server is busy working out other suggestions. Try again shortly.' });
+    return true;
+  }
+  return false;
+}
+
+// How far this person's suggestions have got, for the panel to show.
+app.get('/api/collections/:id/board/suggestions/status', requireAuth, (req, res) => {
+  const owner = collectionOwner(req);
+  collections.get(owner, req.params.id);
+  res.json({ stage: boardSuggestions.get(owner) || null });
+});
+
 app.get('/api/collections/:id/board/suggestions', requireAuth, async (req, res) => {
   const owner = collectionOwner(req);
   const { id } = collections.get(owner, req.params.id);
   const board = collections.board(owner, id);
-  if (boardSuggestions.has(owner)) return res.status(429).json({ error: 'Already working on suggestions. Try again when they have finished' });
-  boardSuggestions.add(owner);
+  const similar = queryParam(req, 'similar') === '1';
+  if (suggestionsBusy(owner, res, 'Already working on suggestions. Try again when they\'ve finished.')) return;
+  boardSuggestions.set(owner, 'Reading the documents on the board…');
+  const started = Date.now();
   try {
     const onBoard = board.objects.filter(o => o.kind === 'doc');
+    const key = `${owner}|${id}|${similar}`;
+    const signature = await suggestionSignature(req, board, onBoard, similar);
+    const remembered = rememberedSuggestions.get(key);
+    if (remembered && remembered.signature === signature) {
+      return res.json({ ...remembered.answer, revision: board.revision, remembered: true });
+    }
     const { cards, vectorsFailed } = await boardCards(req, onBoard);
-    const suggestions = suggestBoard({
+    const read = Date.now() - started;
+    boardSuggestions.set(owner, similar ? 'Comparing every document with the others…' : 'Working out connections and groups…');
+    const suggestions = await runSuggestWorker('suggest', {
       cards,
-      entities: board.objects.filter(o => ['person', 'place', 'org', 'event'].includes(o.kind) && o.title),
+      entities: board.objects.filter(o => ENTITY_KINDS.includes(o.kind) && o.title),
       connections: board.connections,
       dismissed: board.dismissed,
+      similar,
     });
+    const afterWork = Date.now();
     if (suggestions.meaning_used) {
+      boardSuggestions.set(owner, 'Finding the passages that matched…');
       await addPassageEvidence(req, cards, suggestions.connections).catch(err => {
         console.warn('Board suggestions without passages:', err.message);
       });
     }
-    res.json({
-      revision: board.revision,
+    const { timings, ...result } = suggestions;
+    console.log(`Suggestions on ${cards.length} cards${similar ? ', with similar documents' : ''}: reading ${read}ms, `
+      + `${Object.entries(timings).map(([step, ms]) => `${step} ${ms}ms`).join(', ')}, passages ${Date.now() - afterWork}ms`);
+    const answer = {
       analysed: cards.length,
       unavailable: onBoard.length - cards.length,
       vectors_failed: vectorsFailed,
-      ...suggestions,
-    });
+      ...result,
+    };
+    if (!vectorsFailed) rememberSuggestions(key, signature, answer);
+    res.json({ ...answer, revision: board.revision });
   } catch (err) {
     console.error('Board suggestions error:', err.message);
     res.status(502).json({ error: 'Could not work out suggestions', detail: err.message });
@@ -872,14 +994,14 @@ app.post('/api/collections/:id/board/groups/:groupId/rate', requireAuth, async (
   const group = board.groups.find(g => g.id === req.params.groupId);
   if (!group) return res.status(404).json({ error: 'Group not found' });
   const members = board.objects.filter(o => o.group === group.id);
-  if (boardSuggestions.has(owner)) return res.status(429).json({ error: 'Already reading this board. Try again when that has finished' });
-  boardSuggestions.add(owner);
+  if (suggestionsBusy(owner, res, 'Already reading this board. Try again when that has finished.')) return;
+  boardSuggestions.set(owner, 'Rating the group…');
   try {
     const { cards, vectorsFailed } = await boardCards(req, board.objects.filter(o => o.kind === 'doc'));
     const inGroup = new Set(cards.filter(c => c.group === group.id).map(c => c.id));
     if (inGroup.size < 2) return res.status(400).json({ error: 'A group needs at least two documents you can see to be rated' });
     res.json({
-      quality: { ...rateGroup(cards, [...inGroup]), members: members.map(o => o.id), left_out: 0 },
+      quality: { ...(await runSuggestWorker('rate', { cards, members: [...inGroup] })), members: members.map(o => o.id), left_out: 0 },
       rated: inGroup.size,
       vectors_failed: vectorsFailed,
     });

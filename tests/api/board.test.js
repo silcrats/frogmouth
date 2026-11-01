@@ -95,7 +95,7 @@ for (const vector of [false, true]) {
       const objects = docs.map((d, i) => card(`d${i}`, d.id, { x: i }));
       objects.push({ id: 'p1', kind: 'person', x: 0, y: 0, title: 'alice nguyen' }, { id: 'p2', kind: 'person', x: 0, y: 0, title: 'al' }, { id: 'p3', kind: 'person', x: 0, y: 0, title: '(.*)+$' });
       await alice.call('PUT', `${P}/board`, { revision: 0, board: { objects, connections: [{ id: 'k', from: idOf(6), to: idOf(7) }] } });
-      const r = await alice.call('GET', `${P}/board/suggestions`);
+      const r = await alice.call('GET', `${P}/board/suggestions?similar=1`);
       assert.equal(r.status, 200);
       const S = r.body;
       const of = kind => S.connections.filter(c => c.kind === kind);
@@ -126,7 +126,7 @@ for (const vector of [false, true]) {
       assert.ok(!JSON.stringify(saved.board).includes('audit'));
       saved.board.dismissed = [[idOf(0), idOf(1)].sort().join('|')];
       await alice.call('PUT', `${P}/board`, { revision: 1, board: saved.board });
-      const after = (await alice.call('GET', `${P}/board/suggestions`)).body.connections;
+      const after = (await alice.call('GET', `${P}/board/suggestions?similar=1`)).body.connections;
       assert.ok(!after.some(c => [c.from, c.to].includes(idOf(0)) && [c.from, c.to].includes(idOf(1))), 'dismissed stays gone');
     });
 

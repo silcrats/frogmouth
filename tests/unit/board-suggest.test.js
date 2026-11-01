@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { suggestBoard } = require('../../lib/board-suggest');
+const { suggestBoard, meaningPairs } = require('../../lib/board-suggest');
 
 let seed = 11;
 const random = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296 - 0.5;
@@ -71,7 +71,7 @@ test('thread groups stay apart when they share a subject', () => {
 test('headers and routing addresses alone do not relate emails', () => {
   const mk = (id, text) => ({ id, time: 1, group: null, text, doc: { id: `smb://s/${id}`, email_from: 'john.arnold@x', email_subject: id } });
   const padding = Array.from({ length: 6 }, (_, i) => mk(`p${i}`, `Subject: q\nFrom: other\n\nsomething entirely different number ${i} words words`));
-  const result = suggestBoard({ cards: [
+  const result = suggestBoard({ similar: true, cards: [
     mk('a', 'Subject: z\nFrom: john arnold\nTo: bob\n\ntb + 9.5 for 250'),
     mk('b', 'Subject: y\nFrom: john arnold\nTo: bob\n\n----- Forwarded by john arnold/hou/ect on 1/1 -----\nFrom: john arnold\nthat would be great'),
     ...padding,
@@ -110,7 +110,7 @@ test('similar meaning skips dated issues of one series', () => {
     { id: 's2', time: 2, group: null, text: 'beta '.repeat(60), vector: near(centre, 0.05), doc: { id: 'smb://s/2', email_from: 'b@x', email_subject: 'Daily digest 11/21/01' } },
     { id: 'o1', time: 3, group: null, text: 'gamma '.repeat(60), vector: near(centre, 0.05), doc: { id: 'smb://s/3', email_from: 'c@x', email_subject: 'Something else' } },
   );
-  const meaning = suggestBoard({ cards }).connections.filter(c => c.kind === 'meaning');
+  const meaning = suggestBoard({ cards, similar: true }).connections.filter(c => c.kind === 'meaning');
   const has = (a, b) => meaning.some(c => [c.from, c.to].includes(a) && [c.from, c.to].includes(b));
   assert.ok(!has('s1', 's2'), 'one series');
   assert.ok(has('s1', 'o1') || has('s2', 'o1'), 'different subjects can match');
@@ -152,4 +152,52 @@ test('topics rate by shared wording, not by being large', () => {
   const cards = words.flatMap(([text, p]) => Array.from({ length: 12 }, (_, i) => ({ id: `${p}${i}`, time: i, group: null, text: `${text} ${p}note${i}`, doc: { id: `smb://s/${p}/${i}` } })));
   const topic = suggestBoard({ cards }).groupings.find(g => g.key === 'topic');
   assert.ok(topic.groups.every(g => g.quality.shared >= 0.5));
+});
+
+test('the fast comparison finds exactly what comparing every pair both ways does', () => {
+  let seed = 7;
+  const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 - 0.5; };
+  const base = Array.from({ length: 4 }, () => Array.from({ length: 32 }, random));
+  const entries = Array.from({ length: 120 }, (_, i) => {
+    const raw = base[i % 4].map(x => x + random() * 0.5);
+    const norm = Math.hypot(...raw);
+    return {
+      v: Float32Array.from(raw, x => x / norm),
+      copies: [],
+      card: { id: `c${i}`, text: 'body text here '.repeat(20), doc: { id: `smb://s/${i}`, email_subject: i % 10 === 0 ? 'Weekly report' : `Subject ${String.fromCharCode(97 + i % 26)}${String.fromCharCode(97 + Math.floor(i / 26))}` } },
+    };
+  });
+  // Ties too: identical vectors have to keep their order.
+  entries[5].v = entries[9].v;
+  entries[50].v = entries[9].v;
+  const slow = [];
+  const seen = new Set();
+  const seriesOf = e => e.card.doc.email_subject.toLowerCase();
+  for (const a of entries) {
+    const near = [];
+    for (const b of entries) {
+      if (a === b || (seriesOf(a) && seriesOf(a) === seriesOf(b))) continue;
+      let score = 0;
+      for (let k = 0; k < a.v.length; k++) score += a.v[k] * b.v[k];
+      if (score >= 0.6) near.push([b, score]);
+    }
+    near.sort((x, y) => y[1] - x[1]).slice(0, 3).forEach(([b, score]) => {
+      const key = [a.card.id, b.card.id].sort().join('|');
+      if (!seen.has(key)) { seen.add(key); slow.push([a.card.id, b.card.id, score]); }
+    });
+  }
+  assert.ok(slow.length > 50);
+  assert.deepEqual(meaningPairs(entries).map(p => [p.a.id, p.b.id, p.score]), slow);
+});
+
+test('comparing documents with each other is only done on request', () => {
+  const mk = (id, text) => ({ id, time: 1, group: null, text, doc: { id: `smb://s/${id}`, filename: `${id}.txt` } });
+  const cards = [mk('a', 'harbour dredging contract tender '.repeat(9)), mk('b', 'harbour dredging contract tender '.repeat(9) + 'extra'),
+    ...Array.from({ length: 8 }, (_, i) => mk(`p${i}`, `unrelated words number ${i} `.repeat(9)))];
+  const quick = suggestBoard({ cards });
+  assert.equal(quick.similar_included, false);
+  assert.ok(!quick.connections.some(c => c.kind === 'similar'));
+  const full = suggestBoard({ cards, similar: true });
+  assert.equal(full.similar_included, true);
+  assert.ok(full.connections.some(c => c.kind === 'similar'));
 });
