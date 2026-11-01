@@ -48,11 +48,11 @@ test('collections, searching them and their timeline', async t => {
   });
 
   await t.test('the timeline\'s search is limited to the collection in the query itself', async () => {
-    // Regression: filtering afterwards loses matches once the index has over 1,000
+    // Regression: filtering afterwards loses matches once the index has over 5,000
     // better ones, which a small test index can't show by its results alone.
     await app.control('clear');
     await alice.call('GET', `${P}/timeline?q=harbour`);
-    const search = (await app.control('requests')).find(r => r.size === 1000 && r.query.bool && r.query.bool.must);
+    const search = (await app.control('requests')).find(r => r.size === 5000 && r.query.bool && r.query.bool.must);
     assert.ok(search.query.bool.filter.some(f => f.terms && f.terms.url && f.terms.url.length === 4));
   });
 

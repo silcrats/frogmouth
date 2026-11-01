@@ -19,7 +19,7 @@
   const COLLAPSED_H = 40;
   const MIN_GROUP_W = 160;
   const MIN_GROUP_H = 100;
-  const MIN_ZOOM = 0.1;
+  const MIN_ZOOM = 0.05;
   const MAX_ZOOM = 2.5;
   const HISTORY = 50;
   const SAVE_DELAY = 800;

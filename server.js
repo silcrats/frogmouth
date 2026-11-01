@@ -55,11 +55,11 @@ app.use(session({
     secure: config.session.secure_cookie,
   }
 }));
-// A long selection of results can far exceed the default limit below (1,000
+// A long selection of results can far exceed the default limit below (5,000
 // ids of up to 2,048 characters), but only from someone signed in.
-app.post(['/api/collections/:id/items/bulk', '/api/collections/:id/items/bulk-remove'], requireAuth, express.json({ limit: '3mb' }));
+app.post(['/api/collections/:id/items/bulk', '/api/collections/:id/items/bulk-remove'], requireAuth, express.json({ limit: '12mb' }));
 // A full board is a large single save: every document's id, and every note.
-app.put('/api/collections/:id/board', requireAuth, express.json({ limit: '12mb' }));
+app.put('/api/collections/:id/board', requireAuth, express.json({ limit: '20mb' }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
