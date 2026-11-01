@@ -12,6 +12,9 @@
   const GROUP_HEAD = 40;
   const GROUP_GAP = 20;
   const GROUP_MARGIN = 50;
+  const SECTION_H = 34;
+  const MAX_SECTIONS = 100;  // lib/board.js allows more, but past this they don't help
+  const ARRANGEMENTS = [['', 'No sections'], ['date', 'Date'], ['subject', 'Subject'], ['sender', 'Sender'], ['type', 'File type']];
   const MAX_BOARD_CONNECTIONS = 3000;
   const MAX_BOARD_GROUPS = 200;  // lib/board.js refuses to save more
   const MAX_DISMISSED = 5000;
@@ -477,6 +480,16 @@
       size.title = 'Drag to resize';
       size.addEventListener('pointerdown', e => startResize(e, g));
       node.appendChild(size);
+      sectionsNow(g).forEach(({ section, cards, whole }) => {
+        const label = el('div', 'board-section');
+        label.style.top = `${section.y}px`;
+        label.append(el('span', 'board-section-title', section.title), el('span', 'board-group-count', String(cards.length)));
+        const make = button('Make group', () => sectionToGroup(g, section), { title: 'Make this section a group of its own' });
+        make.disabled = whole;
+        make.addEventListener('pointerdown', e => e.stopPropagation());
+        label.append(make);
+        node.appendChild(label);
+      });
     }
     node.classList.toggle('selected', s.selected.has(g.id));
     addHandle(node, g.id);
@@ -1317,12 +1330,9 @@
   // Closes the gaps left by cards that have gone, oldest first, with the frame fitted
   // around them. It can grow if cards were added, so it says if it now overlaps.
   function reshuffleGroup(g) {
-    const cards = membersOf(g.id).sort((a, b) => (timeOf(a) ?? Infinity) - (timeOf(b) ?? Infinity) || (a.id < b.id ? -1 : 1));
-    if (!cards.length) return;
-    const grid = gridFor(cards);
-    placeInFrame(cards, g, grid);
-    g.w = grid.w;
-    g.h = grid.h;
+    if (!membersOf(g.id).length) return;
+    layOutGroup(g);
+    const cards = membersOf(g.id);
     const inside = new Set(cards.map(o => o.id));
     const hits = r => r.x < g.x + g.w && r.x + r.w > g.x && r.y < g.y + g.h && r.y + r.h > g.y;
     const overlapping = [...s.nodes.keys()].filter(id => id !== g.id && !inside.has(id)).filter(id => hits(rectOf(id))).length;
@@ -1330,6 +1340,149 @@
     renderInspector();
     if (overlapping) setStatus(`Re-shuffled. The frame now overlaps ${overlapping} other item${overlapping === 1 ? '' : 's'}, so you may want to move it. Saving…`, true);
   }
+
+  const oldestFirst = (a, b) => (timeOf(a) ?? Infinity) - (timeOf(b) ?? Infinity) || (a.id < b.id ? -1 : 1);
+
+  // A group's cards, in sections if it's arranged, with the frame fitted around them.
+  function layOutGroup(g) {
+    const cards = membersOf(g.id).sort(oldestFirst);
+    const grid = gridFor(cards);
+    g.w = grid.w;
+    g.h = grid.h;
+    if (!g.arrange) {
+      delete g.sections;
+      placeInFrame(cards, g, grid);
+      return;
+    }
+    let y = GROUP_HEAD;
+    g.sections = sectionsFor(cards, g.arrange).map(({ title, cards: inSection }) => {
+      const section = { id: newId(), title, y, members: inSection.map(o => o.id) };
+      y += SECTION_H;
+      inSection.forEach((o, i) => {
+        o.x = g.x + GROUP_PAD + (i % grid.cols) * (CARD_W + GROUP_GAP);
+        o.y = g.y + y + Math.floor(i / grid.cols) * grid.rowH;
+      });
+      y += Math.ceil(inSection.length / grid.cols) * grid.rowH;
+      return section;
+    });
+    g.h = Math.max(MIN_GROUP_H, y - GROUP_GAP + GROUP_PAD);
+  }
+
+  // How to divide some cards, oldest first within each section.
+  function sectionsFor(cards, by) {
+    return by === 'date' ? dateSections(cards) : valueSections(cards, by);
+  }
+
+  function dateSections(cards) {
+    const dated = cards.filter(o => timeOf(o) !== null);
+    const undated = cards.filter(o => timeOf(o) === null);
+    const months = t => new Date(t).getUTCFullYear() * 12 + new Date(t).getUTCMonth();
+    const span = dated.length ? months(timeOf(dated[dated.length - 1])) - months(timeOf(dated[0])) : 0;
+    // Years for a long stretch, months for a shorter one, days within a month.
+    const format = span >= 24 ? { timeZone: 'UTC', year: 'numeric' }
+      : span >= 1 ? { timeZone: 'UTC', year: 'numeric', month: 'short' }
+      : { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' };
+    const keyOf = t => new Date(t).toISOString().slice(0, span >= 24 ? 4 : span >= 1 ? 7 : 10);
+    const sections = new Map();
+    for (const o of dated) {
+      const t = timeOf(o);
+      const key = keyOf(t);
+      if (!sections.has(key)) sections.set(key, { title: new Date(t).toLocaleDateString(undefined, format), cards: [] });
+      sections.get(key).cards.push(o);
+    }
+    const list = [...sections.values()];
+    return mergeExtraSections(list, 'Later', undated.length ? [{ title: 'Undated', cards: undated }] : []);
+  }
+
+  const SECTION_VALUES = {
+    subject: { of: doc => String(firstOf(doc.email_subject) || '').replace(/^(\s*(re|fw|fwd)\s*:\s*)+/i, '').trim(), none: 'No subject', other: 'Other subjects' },
+    sender: { of: doc => String(firstOf(doc.email_from) || '').trim(), none: 'No sender', other: 'Other senders' },
+    type: { of: doc => String(firstOf(doc.type) || '').trim(), none: 'No file type', other: 'Other file types' },
+  };
+
+  // The largest first, then those with one card together, as a section each would
+  // only list them, then whatever the value doesn't apply to.
+  function valueSections(cards, by) {
+    const { of, none, other } = SECTION_VALUES[by];
+    const sections = new Map();
+    const missing = [];
+    const items = [];
+    for (const o of cards) {
+      if (o.kind !== 'doc') { items.push(o); continue; }
+      const doc = s.docs[o.doc_id];
+      const value = doc ? of(doc) : '';
+      if (!value) { missing.push(o); continue; }
+      const key = value.toLowerCase();
+      if (!sections.has(key)) sections.set(key, { title: value, cards: [] });
+      sections.get(key).cards.push(o);
+    }
+    const ordered = [...sections.values()].sort((a, b) => b.cards.length - a.cards.length || (a.title < b.title ? -1 : 1));
+    const several = ordered.filter(section => section.cards.length > 1);
+    const singles = ordered.filter(section => section.cards.length === 1);
+    const main = several.length || singles.length < 2 ? [...several, ...(singles.length === 1 ? singles : [])] : [];
+    const rest = singles.length >= 2 ? [{ title: other, cards: singles.flatMap(section => section.cards).sort(oldestFirst) }] : [];
+    return mergeExtraSections(main, other, [
+      ...rest,
+      ...(missing.length ? [{ title: none, cards: missing }] : []),
+      ...(items.length ? [{ title: 'Notes and other items', cards: items }] : []),
+    ]);
+  }
+
+  // Keeps to the limit by folding the smallest of the main sections into one.
+  function mergeExtraSections(main, title, last) {
+    const room = MAX_SECTIONS - last.length - 1;
+    if (main.length <= room + 1) return [...main, ...last];
+    const folded = main.slice(room).flatMap(section => section.cards).sort(oldestFirst);
+    const same = last.find(section => section.title === title);
+    if (same) {
+      same.cards = [...folded, ...same.cards].sort(oldestFirst);
+      return [...main.slice(0, room), ...last];
+    }
+    return [...main.slice(0, room), { title, cards: folded }, ...last];
+  }
+
+  // The sections with cards still in them, which dragging can change.
+  function sectionsNow(g) {
+    const members = membersOf(g.id);
+    const here = new Map(members.map(o => [o.id, o]));
+    return (g.sections || []).map(section => {
+      const cards = section.members.map(id => here.get(id)).filter(Boolean);
+      return { section, cards, whole: cards.length === members.length };
+    }).filter(({ cards }) => cards.length);
+  }
+
+  function arrangeGroup(g, by) {
+    if (by) g.arrange = by;
+    else delete g.arrange;
+    reshuffleGroup(g);
+  }
+
+  // Takes a section out as its own group, beside the one it came from, and closes the gap.
+  function sectionToGroup(g, section) {
+    if (s.data.groups.length >= MAX_BOARD_GROUPS) {
+      setStatus(`A board can hold up to ${MAX_BOARD_GROUPS} groups. Delete one to add another.`, true);
+      return;
+    }
+    const found = sectionsNow(g).find(entry => entry.section.id === section.id);
+    if (!found || found.whole) return;
+    const cards = found.cards.sort(oldestFirst);
+    const moving = new Set(cards.map(o => o.id));
+    const grid = gridFor(cards);
+    const frame = { id: newId(), title: clipTitle(`${g.title ? `${g.title}: ` : ''}${section.title}`), color: g.color, collapsed: false, x: 0, y: 0, w: grid.w, h: grid.h };
+    cards.forEach(o => { o.group = frame.id; });
+    layOutGroup(g);
+    const others = [...s.nodes.keys()].filter(id => !moving.has(id) && id !== g.id && !membersOf(g.id).some(o => o.id === id)).map(rectOf).filter(Boolean);
+    frame.x = g.x + g.w + GROUP_MARGIN;
+    frame.y = g.y;
+    const hit = () => others.find(r => r.x < frame.x + frame.w && r.x + r.w > frame.x && r.y < frame.y + frame.h && r.y + r.h > frame.y);
+    for (let blocked = hit(); blocked; blocked = hit()) frame.y = blocked.y + blocked.h + GROUP_MARGIN;
+    s.data.groups.push(frame);
+    placeInFrame(cards, frame, grid);
+    commit();
+    select([frame.id]);
+  }
+
+  const clipTitle = text => (text.length > 200 ? `${text.slice(0, 199)}…` : text);
 
   async function rerateGroup(g, control) {
     const board = s;
@@ -1389,8 +1542,34 @@
     });
     check.append(box, document.createTextNode('Collapsed'));
     root.append(check, el('p', 'board-note', `${membersOf(g.id).length} item(s). Drag a card into the frame to add it, or out to take it out.`));
+    const arranging = el('label', 'board-field');
+    arranging.append(el('span', 'board-field-label', 'Arrange by'));
+    const arrange = el('select', 'board-arrange');
+    ARRANGEMENTS.forEach(([value, label]) => {
+      const option = el('option', null, label);
+      option.value = value;
+      arrange.appendChild(option);
+    });
+    arrange.value = g.arrange || '';
+    arrange.disabled = g.collapsed || !membersOf(g.id).length;
+    arrange.addEventListener('change', () => arrangeGroup(g, arrange.value));
+    arranging.append(arrange);
+    root.append(arranging);
+    const sections = sectionsNow(g);
+    if (sections.length) {
+      const list = el('div', 'board-section-list');
+      sections.forEach(({ section, cards, whole }) => {
+        const row = el('div', 'board-section-row');
+        row.append(el('span', 'board-section-title', section.title), el('span', 'board-group-count', String(cards.length)));
+        const make = button('Make group', () => sectionToGroup(g, section), { title: 'Make this section a group of its own' });
+        make.disabled = whole;
+        row.append(make);
+        list.append(row);
+      });
+      root.append(list);
+    }
     const actions = el('div', 'board-actions');
-    const shuffle = button('Re-shuffle cards', () => reshuffleGroup(g), { title: 'Close the gaps, oldest first, and fit the frame around the cards' });
+    const shuffle = button('Re-shuffle cards', () => reshuffleGroup(g), { title: g.arrange ? 'Sort the cards into their sections again, and fit the frame around them' : 'Close the gaps, oldest first, and fit the frame around the cards' });
     shuffle.disabled = g.collapsed || !membersOf(g.id).length;
     actions.append(shuffle, button('Delete group, keep cards', removeSelection, { className: 'board-danger' }));
     root.append(actions);

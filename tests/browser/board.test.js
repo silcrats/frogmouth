@@ -356,5 +356,104 @@ test('the board', async t => {
     await bar.getByRole('button', { name: 'Close' }).click();
   });
 
+  await t.test('a group can be arranged in sections, and a section made its own group', async () => {
+    const d = await makeCollection(page, 'Sections', 30);
+    const objs = d.ids.map((id, i) => ({ id: `d${i}`, kind: 'doc', doc_id: id, x: (i % 6) * 240, y: Math.floor(i / 6) * 130, group: 'g1' }));
+    await api(page, 'PUT', `/api/collections/${d.id}/board`, { revision: 0, board: { objects: objs, groups: [{ id: 'g1', x: -30, y: -50, w: 1500, h: 900, title: 'Reports' }] } });
+    await openCollection(page, 'Sections');
+    await page.click('.banner-board');
+    await page.waitForSelector('.board-group');
+    const labels = page.locator('.board-section');
+    const titles = () => labels.locator('.board-section-title').allTextContents();
+    const saved2 = async () => { await saved(page); return (await api(page, 'GET', `/api/collections/${d.id}/board`)).body; };
+    await page.locator('.board-group-title').click();
+    const arrange = inspector.locator('.board-arrange');
+    assert.equal(await arrange.inputValue(), '');
+    assert.equal(await labels.count(), 0);
+
+    await arrange.selectOption('date');
+    const dates = await titles();
+    assert.ok(dates.length >= 2, dates.join());
+    assert.equal(dates.at(-1), 'Undated', 'the undated card comes last');
+    const years = dates.slice(0, -1);
+    assert.ok(years.every(y => /^\d{4}$/.test(y)) || years.every(y => /\d{4}/.test(y)), years.join());
+    assert.deepEqual(years, [...years].sort((a, b) => Date.parse(a) - Date.parse(b)), 'oldest first');
+    let board = await saved2();
+    let group = board.board.groups[0];
+    assert.equal(group.arrange, 'date');
+    assert.equal(group.sections.flatMap(x => x.members).length, await cards.count(), 'every card in one section');
+    assert.equal(new Set(group.sections.flatMap(x => x.members)).size, await cards.count());
+    // Labels and cards don't overlap, and everything's inside the frame.
+    const overlap = await page.evaluate(() => {
+      const ls = [...document.querySelectorAll('.board-section')].map(e => e.getBoundingClientRect());
+      const cs = [...document.querySelectorAll('.board-card')].map(e => e.getBoundingClientRect());
+      const f = document.querySelector('.board-group').getBoundingClientRect();
+      return { hits: ls.reduce((n, l) => n + cs.filter(c => c.left < l.right && c.right > l.left && c.top < l.bottom && c.bottom > l.top).length, 0), out: cs.filter(c => c.top < f.top || c.bottom > f.bottom + 1 || c.left < f.left || c.right > f.right + 1).length };
+    });
+    assert.deepEqual(overlap, { hits: 0, out: 0 });
+
+    // Moving the frame takes its labels along.
+    const label = () => labels.first().evaluate(e => e.style.top);
+    const top = await label();
+    const head = await page.locator('.board-group-title').boundingBox();
+    await page.mouse.move(head.x + 5, head.y + 5);
+    await page.mouse.down();
+    await page.mouse.move(head.x + 45, head.y + 45, { steps: 3 });
+    await page.mouse.up();
+    assert.equal(await label(), top);
+    await saved(page);
+
+    await arrange.selectOption('subject');
+    assert.ok((await titles()).includes('Other subjects') || (await labels.count()) > 0);
+    await arrange.selectOption('type');
+    assert.ok((await labels.count()) >= 1);
+    await arrange.selectOption('sender');
+    assert.ok((await titles()).includes('No sender'));
+    assert.equal(await page.locator('.board-section b, .board-section img').count(), 0, 'text only');
+
+    // A section becomes a group, beside the original, and undo puts it back.
+    await arrange.selectOption('date');
+    await saved(page);
+    const total = await cards.count();
+    const firstTitle = (await titles())[0];
+    const firstCount = Number(await labels.first().locator('.board-group-count').textContent());
+    await labels.first().getByRole('button', { name: 'Make group' }).click();
+    assert.equal(await page.locator('.board-group').count(), 2);
+    assert.equal(await cards.count(), total, 'no card lost');
+    board = await saved2();
+    const made = board.board.groups.find(x => x.id !== 'g1');
+    group = board.board.groups.find(x => x.id === 'g1');
+    assert.equal(made.title, `Reports: ${firstTitle}`);
+    assert.equal(board.board.objects.filter(o => o.group === made.id).length, firstCount);
+    assert.equal(board.board.objects.filter(o => o.group === 'g1').length, total - firstCount);
+    assert.ok(!(await titles()).includes(firstTitle), 'the section has gone');
+    assert.ok(made.x >= group.x + group.w, 'beside the original');
+    const inFrame = (o, f) => o.x >= f.x && o.y >= f.y && o.x + 220 <= f.x + f.w && o.y < f.y + f.h;
+    assert.ok(board.board.objects.filter(o => o.group === made.id).every(o => inFrame(o, made)));
+    assert.ok(board.board.objects.filter(o => o.group === 'g1').every(o => inFrame(o, group)));
+    await page.locator('.board-canvas').click({ position: { x: 20, y: 20 } });
+    await page.keyboard.press('Control+z');
+    assert.equal(await page.locator('.board-group').count(), 1);
+    assert.ok((await titles()).includes(firstTitle), 'undo brings it back');
+    await page.keyboard.press('Control+Shift+z');
+    assert.equal(await page.locator('.board-group').count(), 2);
+    await saved(page);
+
+    // It survives reopening, and No sections clears it.
+    await bar.getByRole('button', { name: 'Close' }).click();
+    await page.waitForSelector('.board', { state: 'detached' });
+    await page.click('.banner-board');
+    await page.waitForSelector('.board-section');
+    assert.ok((await titles()).length >= 1);
+    await page.locator('.board-group-title', { hasText: /^Reports$/ }).click();
+    await inspector.locator('.board-section-row').first().waitFor();
+    await inspector.locator('.board-arrange').selectOption('');
+    assert.equal(await labels.count(), 0);
+    board = await saved2();
+    assert.equal('arrange' in board.board.groups.find(x => x.id === 'g1'), false);
+    await bar.getByRole('button', { name: 'Close' }).click();
+    await page.waitForSelector('.board', { state: 'detached' });
+  });
+
   await t.test('no errors in the page', () => assert.deepEqual(page.errors, []));
 });

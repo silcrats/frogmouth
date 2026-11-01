@@ -4,6 +4,27 @@ const { cleanBoard } = require('../../lib/board');
 
 const note = (id, extra = {}) => ({ id, kind: 'note', x: 0, y: 0, ...extra });
 
+test('a group\'s sections are kept, checked and only with an arrangement', () => {
+  const g = extra => ({ id: 'g', x: 0, y: 0, w: 400, h: 300, ...extra });
+  const objects = [{ id: 'd', kind: 'note', x: 0, y: 0, group: 'g' }];
+  const section = { id: 's1', title: '<b>2001</b>', y: 40, members: ['d'], junk: 1 };
+  const kept = cleanBoard({ objects, groups: [g({ arrange: 'date', sections: [section] })] }).groups[0];
+  assert.equal(kept.arrange, 'date');
+  assert.deepEqual(kept.sections, [{ id: 's1', title: '<b>2001</b>', y: 40, members: ['d'] }]);
+  const plain = cleanBoard({ objects, groups: [g({ sections: [section] })] }).groups[0];
+  assert.equal('sections' in plain, false);
+  assert.equal('arrange' in plain, false);
+  for (const bad of [
+    { arrange: 'role', sections: [] },
+    { arrange: 'date', sections: [{ ...section, y: -1 }] },
+    { arrange: 'date', sections: [{ ...section, y: 'x' }] },
+    { arrange: 'date', sections: [{ ...section, id: 'a b' }] },
+    { arrange: 'date', sections: [{ ...section, title: 'x'.repeat(201) }] },
+    { arrange: 'date', sections: [{ ...section, members: ['a b'] }] },
+    { arrange: 'date', sections: Array.from({ length: 201 }, (_, i) => ({ ...section, id: `s${i}` })) },
+  ]) assert.throws(() => cleanBoard({ objects, groups: [g(bad)] }), /section|arrangement|title|id|up to|Invalid/i, JSON.stringify(bad).slice(0, 60));
+});
+
 test('keeps only known fields, and rounds positions', () => {
   const b = cleanBoard({ objects: [note('n', { x: 1.4, junk: 1, title: 't' })] });
   assert.equal(b.objects[0].x, 1);

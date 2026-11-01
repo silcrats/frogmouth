@@ -119,6 +119,16 @@ body.board-open { overflow: hidden; }
 .board-group-title { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .board-group-count { font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); }
 .board .board-group-toggle { padding: 1px 6px; }
+.board-section {
+  position: absolute; left: 24px; right: 24px; display: flex; align-items: center; gap: 8px; height: 26px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tone) 45%, transparent);
+}
+.board-section-title { min-width: 0; flex: 0 1 auto; font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.board-section button { margin-left: auto; padding: 1px 8px; font-size: 11px; }
+.board-arrange { width: 100%; }
+.board-section-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; max-height: 260px; overflow-y: auto; }
+.board-section-row { display: flex; align-items: center; gap: 6px; }
+.board-section-row button { margin-left: auto; flex: none; padding: 1px 8px; font-size: 11px; }
 .board-group-size {
   position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; touch-action: none;
   border-right: 2px solid var(--tone); border-bottom: 2px solid var(--tone); border-bottom-right-radius: 8px;
