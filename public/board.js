@@ -1749,10 +1749,13 @@
       }, { className: g.key === data.grouping ? 'active' : '' }));
     });
     const chosen = data.groupings.find(g => g.key === data.grouping);
-    // Which are ticked, per grouping, as this redraws. All start ticked: the
-    // ratings only advise, as some real topics rate as unclear.
+    // Which are ticked, per grouping, as this redraws. Short notes and unclear
+    // topics can still be ticked, as some real topics rate as unclear, but they
+    // aren't a topic until someone says so.
     if (!data.ticked) data.ticked = {};
-    if (!data.ticked[chosen.key]) data.ticked[chosen.key] = new Set(chosen.groups.map(g => g.title));
+    if (!data.ticked[chosen.key]) {
+      data.ticked[chosen.key] = new Set(chosen.groups.filter(g => !g.short && !(g.quality && g.quality.rating === 'unclear')).map(g => g.title));
+    }
     const ticked = data.ticked[chosen.key];
     const nameOf = id => (data.names && data.names[id]) || itemName(id);
     const quality = chosen.quality;

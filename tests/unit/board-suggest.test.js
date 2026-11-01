@@ -133,10 +133,10 @@ test('a large group needs to be more alike than a small one to count as very ali
   const centre = randomVector();
   const board = n => {
     const cards = [];
-    for (let i = 0; i < n; i++) cards.push({ id: `L${i}`, time: i, group: null, text: `dynegy merger fastow article number ${i}`, vector: near(centre, 0.2), doc: { id: `smb://s/L/${i}` } });
+    for (let i = 0; i < n; i++) cards.push({ id: `L${i}`, time: i, group: null, text: `dynegy merger fastow article number ${i} `.repeat(6), vector: near(centre, 0.2), doc: { id: `smb://s/L/${i}` } });
     for (let k = 1; k < 4; k++) {
       const other = randomVector();
-      for (let i = 0; i < n; i++) cards.push({ id: `N${k}x${i}`, time: i, group: null, text: `different wording set${k} entry ${i}`, vector: near(other, 0.2), doc: { id: `smb://s/N${k}/${i}` } });
+      for (let i = 0; i < n; i++) cards.push({ id: `N${k}x${i}`, time: i, group: null, text: `different wording set${k} entry ${i} `.repeat(8), vector: near(other, 0.2), doc: { id: `smb://s/N${k}/${i}` } });
     }
     return suggestBoard({ cards }).groupings.find(g => g.key === 'topic').groups.find(g => g.members.some(m => m[0] === 'L'));
   };
@@ -148,7 +148,7 @@ test('a large group needs to be more alike than a small one to count as very ali
 });
 
 test('topics rate by shared wording, not by being large', () => {
-  const words = [['raptor hedge credit capacity position vehicle ledger', 'a'], ['alpha beta gamma delta epsilon zeta eta', 'b']];
+  const words = [['raptor hedge credit capacity position vehicle ledger '.repeat(4), 'a'], ['alpha beta gamma delta epsilon zeta eta '.repeat(5), 'b']];
   const cards = words.flatMap(([text, p]) => Array.from({ length: 12 }, (_, i) => ({ id: `${p}${i}`, time: i, group: null, text: `${text} ${p}note${i}`, doc: { id: `smb://s/${p}/${i}` } })));
   const topic = suggestBoard({ cards }).groupings.find(g => g.key === 'topic');
   assert.ok(topic.groups.every(g => g.quality.shared >= 0.5));
@@ -205,7 +205,7 @@ test('comparing documents with each other is only done on request', () => {
 test('topics can offer as many groups as a board holds', () => {
   const word = i => `w${String.fromCharCode(97 + i % 26)}${String.fromCharCode(97 + Math.floor(i / 26) % 26)}${String.fromCharCode(97 + Math.floor(i / 676))}x`;
   const pairs = n => Array.from({ length: n }, (_, i) => {
-    const text = `${word(i * 3)} ${word(i * 3 + 1)} ${word(i * 3 + 2)} `.repeat(8);
+    const text = `${word(i * 3)} ${word(i * 3 + 1)} ${word(i * 3 + 2)} `.repeat(20);
     return ['a', 'b'].map(side => ({ id: `${i}${side}`, time: i, group: null, text, doc: { id: `smb://s/${i}${side}`, filename: `${i}${side}.txt` } }));
   }).flat();
   const topics = n => suggestBoard({ cards: pairs(n) }).groupings.find(g => g.key === 'topic');
@@ -216,4 +216,64 @@ test('topics can offer as many groups as a board holds', () => {
   const many = topics(230);
   assert.equal(many.groups.length, 200);
   assert.equal(many.left_out, 30);
+});
+
+const emailCard = (id, body, extra = {}) => ({ id, time: 1, group: null, text: `Subject: s${id}\n\n${body}`, doc: { id: `smb://s/${id}`, email_from: 'john.delainey@x.example', email_subject: `s${id}`, ...extra } });
+const unitRandom = (centre, spread) => {
+  const raw = centre.map(x => x + random() * spread);
+  const norm = Math.hypot(...raw);
+  return raw.map(x => x / norm);
+};
+
+test('emails of a line or two go in Short notes, not in a topic', () => {
+  const long = i => `quarterly gas pipeline capacity tariff review number ${i} `.repeat(8);
+  const centre = randomVector();
+  const cards = [
+    ...Array.from({ length: 30 }, (_, i) => ({ ...emailCard(`l${i}`, long(i)), vector: unitRandom(centre, 0.2) })),
+    ...Array.from({ length: 12 }, (_, i) => ({ ...emailCard(`n${i}`, `call me ${i}`), vector: unitRandom(centre, 0.2) })),
+  ];
+  const elsewhere = randomVector();
+  const second = Array.from({ length: 10 }, (_, i) => ({ ...emailCard(`l2${i}`, `harbour dredging licence tender round ${i} `.repeat(8)), vector: unitRandom(elsewhere, 0.05) }));
+  cards.splice(30, 0, ...second);
+  const topic = suggestBoard({ cards }).groupings.find(g => g.key === 'topic');
+  const notes = topic.groups.filter(g => g.short);
+  assert.equal(notes.length, 1);
+  assert.equal(notes[0].title, 'Short notes');
+  assert.equal(notes[0].members.length, 12);
+  assert.ok(topic.groups.filter(g => !g.short).every(g => g.members.every(id => id.startsWith('l'))));
+  // Without vectors, the same.
+  const words = suggestBoard({ cards: cards.map(({ vector, ...c }) => c) }).groupings.find(g => g.key === 'topic');
+  assert.equal(words.groups.find(g => g.short).members.length, 12);
+  // One alone has no group, and a card already grouped is left where it is.
+  const lone = suggestBoard({ cards: [...cards.slice(0, 40), cards[40], { ...cards[41], group: 'g' }] }).groupings.find(g => g.key === 'topic');
+  assert.equal(lone.groups.some(g => g.short), false);
+});
+
+test('a topic is named from what its emails say, not who sent and received them', () => {
+  const body = i => `john delainey discussed pipeline capacity tariff with arnold ${i} `.repeat(8);
+  const centre = randomVector();
+  const elsewhere = randomVector();
+  const cards = [
+    ...Array.from({ length: 24 }, (_, i) => ({ ...emailCard(`t${i}`, body(i), { email_to: 'arnold@x.example' }), vector: unitRandom(centre, 0.05) })),
+    ...Array.from({ length: 24 }, (_, i) => ({ ...emailCard(`u${i}`, `harbour dredging licence tender round ${i} `.repeat(8)), vector: unitRandom(elsewhere, 0.05) })),
+  ];
+  for (const result of [suggestBoard({ cards }), suggestBoard({ cards: cards.map(({ vector, ...c }) => c) })]) {
+    const { title } = result.groupings.find(g => g.key === 'topic').groups.find(g => g.members.includes('t0'));
+    assert.doesNotMatch(title, /john|delainey|arnold/);
+    assert.match(title, /pipeline|capacity|tariff|discussed/);
+  }
+});
+
+test('a large, loose topic is split, and a tight one is left whole', () => {
+  const texts = (name, i) => `alpha beta gamma delta epsilon zeta eta theta iota kappa ${name} number ${i} `.repeat(6);
+  const make = (name, centre, spread, n) => Array.from({ length: n }, (_, i) => ({ ...emailCard(`${name}${i}`, texts(name, i)), vector: unitRandom(centre, spread) }));
+  const [a, b, filler] = [randomVector(), randomVector(), randomVector()];
+  // Two themes that sit close enough for one pass at the low bar to merge them.
+  const mixed = a.map((x, i) => x * 0.6 + b[i] * 0.4);
+  const other = a.map((x, i) => x * 0.4 + b[i] * 0.6);
+  const loose = [...make('a', mixed, 0.7, 40), ...make('b', other, 0.7, 40), ...make('e', filler, 0.02, 25)];
+  const tight = [...make('c', a, 0.02, 40), ...make('e', filler, 0.02, 25)];
+  const biggest = cards => Math.max(...suggestBoard({ cards }).groupings.find(g => g.key === 'topic').groups.map(g => g.members.length));
+  assert.ok(biggest(loose) < 80, `loose stayed at ${biggest(loose)}`);
+  assert.ok(biggest(tight) >= 40, 'tight stays together');
 });
