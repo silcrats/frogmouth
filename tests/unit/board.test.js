@@ -11,6 +11,8 @@ test('a group\'s sections are kept, checked and only with an arrangement', () =>
   const kept = cleanBoard({ objects, groups: [g({ arrange: 'date', sections: [section] })] }).groups[0];
   assert.equal(kept.arrange, 'date');
   assert.deepEqual(kept.sections, [{ id: 's1', title: '<b>2001</b>', y: 40, members: ['d'] }]);
+  const across = cleanBoard({ objects, groups: [g({ arrange: 'date', sections: [{ ...section, x: 24, w: 460 }] })] }).groups[0];
+  assert.deepEqual([across.sections[0].x, across.sections[0].w], [24, 460]);
   const plain = cleanBoard({ objects, groups: [g({ sections: [section] })] }).groups[0];
   assert.equal('sections' in plain, false);
   assert.equal('arrange' in plain, false);

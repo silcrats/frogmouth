@@ -483,6 +483,10 @@
       sectionsNow(g).forEach(({ section, cards, whole }) => {
         const label = el('div', 'board-section');
         label.style.top = `${section.y}px`;
+        if (section.w) {
+          label.style.left = `${section.x}px`;
+          label.style.width = `${section.w}px`;
+        }
         label.append(el('span', 'board-section-title', section.title), el('span', 'board-group-count', String(cards.length)));
         const make = button('Make group', () => sectionToGroup(g, section), { title: 'Make this section a group of its own' });
         make.disabled = whole;
@@ -1328,17 +1332,14 @@
   }
 
   // Closes the gaps left by cards that have gone, oldest first, with the frame fitted
-  // around them. It can grow if cards were added, so it says if it now overlaps.
+  // around them. If it grows, whatever it would land on moves out of the way.
   function reshuffleGroup(g) {
     if (!membersOf(g.id).length) return;
     layOutGroup(g);
-    const cards = membersOf(g.id);
-    const inside = new Set(cards.map(o => o.id));
-    const hits = r => r.x < g.x + g.w && r.x + r.w > g.x && r.y < g.y + g.h && r.y + r.h > g.y;
-    const overlapping = [...s.nodes.keys()].filter(id => id !== g.id && !inside.has(id)).filter(id => hits(rectOf(id))).length;
+    const moved = makeRoomFor(g);
     commit();
     renderInspector();
-    if (overlapping) setStatus(`Re-shuffled. The frame now overlaps ${overlapping} other item${overlapping === 1 ? '' : 's'}, so you may want to move it. Saving…`, true);
+    if (moved) setStatus(`Moved ${moved} other item${moved === 1 ? '' : 's'} out of the way.`);
   }
 
   const oldestFirst = (a, b) => (timeOf(a) ?? Infinity) - (timeOf(b) ?? Infinity) || (a.id < b.id ? -1 : 1);
@@ -1354,18 +1355,77 @@
       placeInFrame(cards, g, grid);
       return;
     }
-    let y = GROUP_HEAD;
+    // Sections side by side, in order, starting a new row when one won't fit.
+    const step = CARD_W + GROUP_GAP;
+    const inner = grid.cols * step - GROUP_GAP;
+    let [x, y, rowHeight] = [0, GROUP_HEAD, 0];
     g.sections = sectionsFor(cards, g.arrange).map(({ title, cards: inSection }) => {
-      const section = { id: newId(), title, y, members: inSection.map(o => o.id) };
-      y += SECTION_H;
+      const cols = inSection.length >= grid.cols ? grid.cols : Math.ceil(Math.sqrt(inSection.length));
+      const width = cols * step - GROUP_GAP;
+      if (x && x + width > inner) {
+        x = 0;
+        y += rowHeight;
+        rowHeight = 0;
+      }
+      const section = { id: newId(), title, x: GROUP_PAD + x, y, w: width, members: inSection.map(o => o.id) };
       inSection.forEach((o, i) => {
-        o.x = g.x + GROUP_PAD + (i % grid.cols) * (CARD_W + GROUP_GAP);
-        o.y = g.y + y + Math.floor(i / grid.cols) * grid.rowH;
+        o.x = g.x + GROUP_PAD + x + (i % cols) * step;
+        o.y = g.y + y + SECTION_H + Math.floor(i / cols) * grid.rowH;
       });
-      y += Math.ceil(inSection.length / grid.cols) * grid.rowH;
+      rowHeight = Math.max(rowHeight, SECTION_H + Math.ceil(inSection.length / cols) * grid.rowH);
+      x += width + step - CARD_W;
       return section;
     });
-    g.h = Math.max(MIN_GROUP_H, y - GROUP_GAP + GROUP_PAD);
+    g.h = Math.max(MIN_GROUP_H, y + rowHeight - GROUP_GAP + GROUP_PAD);
+  }
+
+  // What can be moved as one: a group and its cards, or a card in no group.
+  function topLevelItems(except) {
+    const groups = s.data.groups.filter(g => g.id !== except.id).map(g => ({
+      group: g, x: g.x, y: g.y, w: g.collapsed ? COLLAPSED_W : g.w, h: g.collapsed ? COLLAPSED_H : g.h,
+    }));
+    const cards = s.data.objects.filter(o => !o.group).map(o => {
+      const size = s.sizes.get(o.id) || { w: CARD_W, h: CARD_H };
+      return { card: o, x: o.x, y: o.y, w: size.w, h: size.h };
+    });
+    return [...groups, ...cards];
+  }
+
+  // Moves whatever a frame now lands on, right or down, whichever is the shorter
+  // way, then whatever that lands on in turn. Says how many moved.
+  function makeRoomFor(g) {
+    const items = topLevelItems(g);
+    const moved = new Set();
+    const queue = [{ x: g.x, y: g.y, w: g.w, h: g.h }];
+    const limit = items.length * 20 + 1;
+    for (let turns = 0; queue.length && turns < limit; turns++) {
+      const mover = queue.shift();
+      for (const item of items) {
+        if (item === mover || item.x >= mover.x + mover.w || item.x + item.w <= mover.x
+            || item.y >= mover.y + mover.h || item.y + item.h <= mover.y) continue;
+        const right = mover.x + mover.w + GROUP_MARGIN - item.x;
+        const down = mover.y + mover.h + GROUP_MARGIN - item.y;
+        if (right < down) item.x += right;
+        else item.y += down;
+        moved.add(item);
+        queue.push(item);
+      }
+    }
+    for (const item of moved) {
+      if (item.card) {
+        item.card.x = item.x;
+        item.card.y = item.y;
+      } else {
+        const [dx, dy] = [item.x - item.group.x, item.y - item.group.y];
+        membersOf(item.group.id).forEach(o => {
+          o.x += dx;
+          o.y += dy;
+        });
+        item.group.x = item.x;
+        item.group.y = item.y;
+      }
+    }
+    return moved.size;
   }
 
   // How to divide some cards, oldest first within each section.

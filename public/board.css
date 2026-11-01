@@ -120,7 +120,7 @@ body.board-open { overflow: hidden; }
 .board-group-count { font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); }
 .board .board-group-toggle { padding: 1px 6px; }
 .board-section {
-  position: absolute; left: 24px; right: 24px; display: flex; align-items: center; gap: 8px; height: 26px;
+  position: absolute; left: 24px; right: 24px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; height: 26px;
   border-bottom: 1px solid color-mix(in srgb, var(--tone) 45%, transparent);
 }
 .board-section-title { min-width: 0; flex: 0 1 auto; font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

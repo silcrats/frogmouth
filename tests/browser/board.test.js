@@ -455,5 +455,57 @@ test('the board', async t => {
     await page.waitForSelector('.board', { state: 'detached' });
   });
 
+  await t.test('sections sit side by side, and what a growing frame lands on moves away', async () => {
+    const d = await makeCollection(page, 'Packing', 30);
+    const objs = d.ids.map((id, i) => ({ id: `d${i}`, kind: 'doc', doc_id: id, x: 20 + (i % 3) * 30, y: 60 + (i % 2) * 10, group: i < 20 ? 'g1' : 'g2' }));
+    objs.slice(20).forEach((o, i) => { o.x = 40 + (i % 3) * 240; o.y = 460 + Math.floor(i / 3) * 130; });
+    objs.push({ id: 'n1', kind: 'note', x: 900, y: 100, title: 'Loose', text: 'Loose' });
+    const groups = [{ id: 'g1', x: 0, y: 0, w: 300, h: 300, title: 'Small' }, { id: 'g2', x: 0, y: 400, w: 800, h: 500, title: 'Below' }];
+    await api(page, 'PUT', `/api/collections/${d.id}/board`, { revision: 0, board: { objects: objs, groups } });
+    await openCollection(page, 'Packing');
+    await page.click('.banner-board');
+    await page.waitForSelector('.board-group');
+    await page.locator('.board-group-title', { hasText: 'Small' }).click();
+    await inspector.locator('.board-arrange').selectOption('date');
+    await saved(page);
+    const b = (await api(page, 'GET', `/api/collections/${d.id}/board`)).body.board;
+    const [g1, g2] = ['g1', 'g2'].map(id => b.groups.find(g => g.id === id));
+    const apart = (p, q) => p.x + p.w <= q.x || q.x + q.w <= p.x || p.y + p.h <= q.y || q.y + q.h <= p.y;
+    assert.ok(apart(g1, g2), 'the frames don\'t overlap');
+    const note = b.objects.find(o => o.id === 'n1');
+    assert.ok(apart(g1, { x: note.x, y: note.y, w: 220, h: 90 }), 'nor does the loose note');
+    assert.ok(apart(g2, { x: note.x, y: note.y, w: 220, h: 90 }));
+    // The group below took its cards with it.
+    const before = objs.filter(o => o.group === 'g2').map(o => [o.x - 0, o.y - 400]);
+    const after = b.objects.filter(o => o.group === 'g2').map(o => [o.x - g2.x, o.y - g2.y]);
+    assert.deepEqual(after, before);
+    // In the frame, sections and their cards don't overlap, and short ones share a row.
+    const onPage = await page.evaluate(() => {
+      const box = e => e.getBoundingClientRect();
+      const ls = [...document.querySelectorAll('.board-section')].map(box);
+      const cs = [...document.querySelectorAll('.board-card')].map(box);
+      return {
+        rows: new Set(ls.map(l => Math.round(l.top))).size,
+        labels: ls.length,
+        hits: ls.reduce((n, l) => n + cs.filter(c => c.left < l.right && c.right > l.left && c.top < l.bottom && c.bottom > l.top).length, 0),
+        labelHits: ls.reduce((n, l, i) => n + ls.filter((m, j) => j !== i && l.left < m.right && l.right > m.left && l.top < m.bottom && l.bottom > m.top).length, 0),
+      };
+    });
+    assert.equal(onPage.hits, 0);
+    assert.equal(onPage.labelHits, 0);
+    assert.ok(onPage.rows < onPage.labels, `${onPage.labels} sections on ${onPage.rows} rows`);
+    assert.ok(b.objects.filter(o => o.group === 'g1').every(o => o.x >= g1.x && o.y >= g1.y && o.x + 220 <= g1.x + g1.w && o.y < g1.y + g1.h));
+    const cardRects = b.objects.filter(o => o.group === 'g1').map(o => `${o.x},${o.y}`);
+    assert.equal(new Set(cardRects).size, cardRects.length, 'no two cards on one spot');
+    // Undo puts everything back.
+    await page.locator('.board-canvas').click({ position: { x: 20, y: 20 } });
+    await page.keyboard.press('Control+z');
+    await saved(page);
+    const undone = (await api(page, 'GET', `/api/collections/${d.id}/board`)).body.board;
+    assert.equal(undone.groups.find(g => g.id === 'g2').y, 400);
+    await bar.getByRole('button', { name: 'Close' }).click();
+    await page.waitForSelector('.board', { state: 'detached' });
+  });
+
   await t.test('no errors in the page', () => assert.deepEqual(page.errors, []));
 });
