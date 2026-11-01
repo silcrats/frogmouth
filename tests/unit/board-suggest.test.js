@@ -201,3 +201,19 @@ test('comparing documents with each other is only done on request', () => {
   assert.equal(full.similar_included, true);
   assert.ok(full.connections.some(c => c.kind === 'similar'));
 });
+
+test('topics can offer as many groups as a board holds', () => {
+  const word = i => `w${String.fromCharCode(97 + i % 26)}${String.fromCharCode(97 + Math.floor(i / 26) % 26)}${String.fromCharCode(97 + Math.floor(i / 676))}x`;
+  const pairs = n => Array.from({ length: n }, (_, i) => {
+    const text = `${word(i * 3)} ${word(i * 3 + 1)} ${word(i * 3 + 2)} `.repeat(8);
+    return ['a', 'b'].map(side => ({ id: `${i}${side}`, time: i, group: null, text, doc: { id: `smb://s/${i}${side}`, filename: `${i}${side}.txt` } }));
+  }).flat();
+  const topics = n => suggestBoard({ cards: pairs(n) }).groupings.find(g => g.key === 'topic');
+  const some = topics(60);
+  assert.equal(some.groups.length, 60);
+  assert.equal(some.left_out, 0);
+  assert.ok(some.groups.every(g => g.quality), 'all rated');
+  const many = topics(230);
+  assert.equal(many.groups.length, 200);
+  assert.equal(many.left_out, 30);
+});
