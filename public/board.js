@@ -33,6 +33,7 @@
   const HIST_BINS = 80;
   const PLAY_TICK = 80;
   const PLAY_STEPS = 200;
+  const SHOW_TEXT_KEY = 'frogmouth.boardShowText';
   const HIDE_KEY = 'frogmouth.boardHideOut';
   const KINDS = { doc: 'Document', note: 'Note', person: 'Person', place: 'Place', org: 'Organisation', event: 'Event' };
   const COLORS = ['default', 'teal', 'amber', 'red', 'violet', 'blue'];
@@ -1240,6 +1241,18 @@
         }
       });
       actions.append(show);
+      const always = el('label', 'board-check');
+      const alwaysBox = el('input');
+      alwaysBox.type = 'checkbox';
+      alwaysBox.checked = loadPref(SHOW_TEXT_KEY) === '1';
+      alwaysBox.addEventListener('change', () => {
+        savePref(SHOW_TEXT_KEY, alwaysBox.checked ? '1' : '0');
+        if (alwaysBox.checked && textBox.hidden) show.click();
+      });
+      always.append(alwaysBox, document.createTextNode('Show by default'));
+      always.title = 'Open the text whenever you select a document, on this browser';
+      actions.append(always);
+      if (alwaysBox.checked) show.click();
       if (!s.items.includes(o.doc_id)) {
         actions.append(button('Add back to collection', async e => {
           e.currentTarget.disabled = true;

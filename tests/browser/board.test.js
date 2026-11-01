@@ -524,6 +524,45 @@ test('the board', async t => {
     await page.waitForSelector('.board', { state: 'detached' });
   });
 
+  await t.test('a document\'s text can show by default', async () => {
+    const d = await makeCollection(page, 'Text default', 6);
+    await api(page, 'PUT', `/api/collections/${d.id}/board`, { revision: 0, board: { objects: d.ids.map((id, i) => ({ id: `d${i}`, kind: 'doc', doc_id: id, x: i * 240, y: 0 })) } });
+    await openCollection(page, 'Text default');
+    await page.click('.banner-board');
+    await page.waitForSelector('.board-card');
+    const text = inspector.locator('.board-text');
+    const box = inspector.getByLabel('Show by default');
+    const requests = [];
+    const watch = r => { if (r.url().includes('/api/document')) requests.push(r.url()); };
+    page.on('request', watch);
+    await cards.nth(0).click();
+    assert.equal(await text.isVisible(), false, 'off to begin with');
+    assert.equal(requests.length, 0, 'and nothing fetched');
+    await box.check();
+    await inspector.locator('.board-text:not(:has-text("Loading"))').waitFor();
+    assert.ok(await text.isVisible(), 'shows now');
+    assert.equal(await inspector.getByRole('button', { name: 'Hide text' }).count(), 1);
+    await cards.nth(1).click();
+    await inspector.getByRole('button', { name: 'Hide text' }).waitFor();
+    assert.ok(await text.isVisible(), 'and on the next document');
+    assert.equal(requests.length, 2);
+    await inspector.getByRole('button', { name: 'Hide text' }).click();
+    assert.equal(await text.isVisible(), false, 'it can still be hidden');
+    // Remembered after reloading.
+    page.off('request', watch);
+    await bar.getByRole('button', { name: 'Close' }).click();
+    await page.waitForSelector('.board', { state: 'detached' });
+    await page.click('.banner-board');
+    await page.waitForSelector('.board-card');
+    await cards.nth(2).click();
+    await inspector.getByRole('button', { name: 'Hide text' }).waitFor();
+    await inspector.getByLabel('Show by default').uncheck();
+    await cards.nth(3).click();
+    assert.equal(await inspector.locator('.board-text').isVisible(), false, 'off again');
+    await bar.getByRole('button', { name: 'Close' }).click();
+    await page.waitForSelector('.board', { state: 'detached' });
+  });
+
   await t.test('the Suggest button leaves the slow comparison for Find similar documents', async () => {
     const d = await makeCollection(page, 'Two steps', 30);
     const objs = d.ids.map((id, i) => ({ id: `d${i}`, kind: 'doc', doc_id: id, x: (i % 6) * 240, y: Math.floor(i / 6) * 130 }));
