@@ -524,5 +524,55 @@ test('the board', async t => {
     await page.waitForSelector('.board', { state: 'detached' });
   });
 
+  await t.test('Suggest can apply its groups already arranged in sections', async () => {
+    const d = await makeCollection(page, 'From suggest', 30);
+    const objs = d.ids.map((id, i) => ({ id: `d${i}`, kind: 'doc', doc_id: id, x: (i % 6) * 240, y: Math.floor(i / 6) * 130 }));
+    await api(page, 'PUT', `/api/collections/${d.id}/board`, { revision: 0, board: { objects: objs } });
+    await openCollection(page, 'From suggest');
+    await page.click('.banner-board');
+    await page.waitForSelector('.board-card');
+    const run = async by => {
+      await bar.getByRole('button', { name: 'Suggest' }).click();
+      await page.waitForSelector('.board-suggest-tabs');
+      await page.locator('.board-suggest-tabs button', { hasText: 'File type' }).click();
+      const choice = inspector.locator('.board-arrange');
+      assert.equal(await choice.inputValue(), '', 'off unless chosen');
+      if (by) await choice.selectOption(by);
+      await page.locator('.board-suggest-tabs button', { hasText: 'Topic' }).click();
+      assert.equal(await inspector.locator('.board-arrange').inputValue(), by, 'kept on changing tab');
+      await page.locator('.board-suggest-tabs button', { hasText: 'File type' }).click();
+      await inspector.getByRole('button', { name: /^Apply/ }).click();
+      await saved(page);
+      return (await api(page, 'GET', `/api/collections/${d.id}/board`)).body.board;
+    };
+    const b = await run('date');
+    assert.ok(b.groups.length >= 2);
+    const apart = (p, q) => p.x + p.w <= q.x || q.x + q.w <= p.x || p.y + p.h <= q.y || q.y + q.h <= p.y;
+    b.groups.forEach((g, i) => {
+      assert.equal(g.arrange, 'date');
+      assert.ok(g.sections.length >= 1);
+      const members = b.objects.filter(o => o.group === g.id);
+      assert.deepEqual(g.sections.flatMap(x => x.members).sort(), members.map(o => o.id).sort());
+      for (const section of g.sections) {
+        for (const id of section.members) {
+          const o = members.find(m => m.id === id);
+          assert.ok(o.x >= g.x + section.x && o.x + 220 <= g.x + section.x + section.w && o.y >= g.y + section.y && o.y < g.y + section.y + section.h, 'in its box');
+        }
+      }
+      b.groups.slice(i + 1).forEach(q => assert.ok(apart(g, q), 'frames apart'));
+    });
+    assert.ok(await page.locator('.board-section-box').count() >= b.groups.length);
+    // Undo takes it all back in one step, and without a choice there are no sections.
+    await page.locator('.board-canvas').click({ position: { x: 20, y: 20 } });
+    await page.keyboard.press('Control+z');
+    assert.equal(await page.locator('.board-group').count(), 0);
+    await saved(page);
+    const plain = await run('');
+    assert.ok(plain.groups.length >= 2);
+    assert.ok(plain.groups.every(g => !g.arrange && !g.sections));
+    await bar.getByRole('button', { name: 'Close' }).click();
+    await page.waitForSelector('.board', { state: 'detached' });
+  });
+
   await t.test('no errors in the page', () => assert.deepEqual(page.errors, []));
 });

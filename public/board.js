@@ -1348,6 +1348,21 @@
     if (moved) setStatus(`Moved ${moved} other item${moved === 1 ? '' : 's'} out of the way.`);
   }
 
+  function arrangeChoice(text, value, onChange) {
+    const field = el('label', 'board-field');
+    field.append(el('span', 'board-field-label', text));
+    const arrange = el('select', 'board-arrange');
+    ARRANGEMENTS.forEach(([option, label]) => {
+      const item = el('option', null, label);
+      item.value = option;
+      arrange.appendChild(item);
+    });
+    arrange.value = value;
+    arrange.addEventListener('change', () => onChange(arrange.value));
+    field.append(arrange);
+    return field;
+  }
+
   const oldestFirst = (a, b) => (timeOf(a) ?? Infinity) - (timeOf(b) ?? Infinity) || (a.id < b.id ? -1 : 1);
 
   // A group's cards, in sections if it's arranged, with the frame fitted around them.
@@ -1611,18 +1626,8 @@
     });
     check.append(box, document.createTextNode('Collapsed'));
     root.append(check, el('p', 'board-note', `${membersOf(g.id).length} item(s). Drag a card into the frame to add it, or out to take it out.`));
-    const arranging = el('label', 'board-field');
-    arranging.append(el('span', 'board-field-label', 'Arrange by'));
-    const arrange = el('select', 'board-arrange');
-    ARRANGEMENTS.forEach(([value, label]) => {
-      const option = el('option', null, label);
-      option.value = value;
-      arrange.appendChild(option);
-    });
-    arrange.value = g.arrange || '';
-    arrange.disabled = g.collapsed || !membersOf(g.id).length;
-    arrange.addEventListener('change', () => arrangeGroup(g, arrange.value));
-    arranging.append(arrange);
+    const arranging = arrangeChoice('Arrange by', g.arrange || '', value => arrangeGroup(g, value));
+    arranging.querySelector('select').disabled = g.collapsed || !membersOf(g.id).length;
     root.append(arranging);
     const sections = sectionsNow(g);
     if (sections.length) {
@@ -2066,7 +2071,7 @@
       check.append(box, document.createTextNode(`Leave out the ${totalWeak.toLocaleString()} weak fit${totalWeak === 1 ? '' : 's'}`));
       parts.push(check);
     }
-    const apply = button('', () => applyGrouping({ ...chosen, groups: applying() }), {
+    const apply = button('', () => applyGrouping({ ...chosen, groups: applying() }, data.arrange || ''), {
       className: 'board-suggest-accept', title: 'Makes the frames and moves these cards into them',
     });
     const applyNote = el('p', 'board-note');
@@ -2096,7 +2101,7 @@
       applyNote.textContent = notes.join(' ');
     }
     updateApply();
-    parts.push(apply, applyNote);
+    parts.push(arrangeChoice('Arrange each group by', data.arrange || '', value => { data.arrange = value; }), apply, applyNote);
     root.append(...parts);
   }
 
@@ -2120,34 +2125,41 @@
   }
 
   // Frames in rows to the right of whatever isn't moving, each with its cards in a grid.
-  function applyGrouping(chosen) {
+  function applyGrouping(chosen, arrange = '') {
     const moving = new Set(chosen.groups.flatMap(g => g.members));
     const staying = [...s.nodes.keys()].filter(id => !moving.has(id)).map(rectOf).filter(Boolean);
     const originX = staying.length ? Math.max(...staying.map(r => r.x + r.w)) + 80 : 0;
     const originY = staying.length ? Math.min(...staying.map(r => r.y)) : 0;
     const shapes = chosen.groups.map(g => {
       const cards = g.members.map(objectById).filter(o => o && !o.group);
-      return { g, cards, ...gridFor(cards) };
-    }).filter(shape => shape.cards.length);
-    const totalArea = shapes.reduce((sum, f) => sum + (f.w + GROUP_MARGIN) * (f.h + GROUP_MARGIN), 0);
-    const widest = Math.max(0, ...shapes.map(f => f.w));
-    const rowWidth = Math.max(widest, Math.sqrt(totalArea) * 1.3);
-    let [x, y, tallest] = [0, 0, 0];
-    shapes.forEach(({ g, cards, cols, rowH, w, h }) => {
-      if (x && x + w > rowWidth) {
-        x = 0;
-        y += tallest + GROUP_MARGIN;
-        tallest = 0;
-      }
-      const frame = { id: newId(), title: g.title, color: 'default', collapsed: false, x: originX + x, y: originY + y, w, h };
+      if (!cards.length) return { cards };
+      const frame = { id: newId(), title: g.title, color: 'default', collapsed: false, x: 0, y: 0, w: 0, h: 0, ...(arrange && { arrange }) };
       if (g.quality) {
         const { rating, basis, alike, shared, weak_fits: weakFits } = g.quality;
         const members = cards.map(o => o.id);
         frame.quality = { rating, basis, alike, shared, members, weak_fits: weakFits.filter(id => members.includes(id)), left_out: g.left_out || 0 };
       }
-      s.data.groups.push(frame);
       cards.forEach(o => { o.group = frame.id; });
-      placeInFrame(cards, frame, { cols, rowH });
+      s.data.groups.push(frame);
+      layOutGroup(frame);
+      return { frame, cards, w: frame.w, h: frame.h };
+    }).filter(shape => shape.frame);
+    const totalArea = shapes.reduce((sum, f) => sum + (f.w + GROUP_MARGIN) * (f.h + GROUP_MARGIN), 0);
+    const widest = Math.max(0, ...shapes.map(f => f.w));
+    const rowWidth = Math.max(widest, Math.sqrt(totalArea) * 1.3);
+    let [x, y, tallest] = [0, 0, 0];
+    shapes.forEach(({ frame, cards, w, h }) => {
+      if (x && x + w > rowWidth) {
+        x = 0;
+        y += tallest + GROUP_MARGIN;
+        tallest = 0;
+      }
+      frame.x = originX + x;
+      frame.y = originY + y;
+      cards.forEach(o => {
+        o.x += frame.x;
+        o.y += frame.y;
+      });
       x += w + GROUP_MARGIN;
       tallest = Math.max(tallest, h);
     });
