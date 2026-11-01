@@ -1848,7 +1848,9 @@
 
   // Worked out on the server from the saved board, so anything unsaved goes
   // first. Nothing changes until it's accepted, and accepting is one undo step.
-  async function openSuggestions(similar = false) {
+  // Called with true only for Find similar documents: a toolbar button passes its click event.
+  async function openSuggestions(option) {
+    const similar = option === true;
     const board = s;
     s.panel = null;
     s.suggest = { loading: true, similar };
@@ -1925,7 +1927,10 @@
   }
 
   function renderConnectionChoice(root, data) {
-    const rows = data.connections.filter(c => objectById(c.from) && objectById(c.to) && !isConnected(c.from, c.to));
+    // Lists of ids, not lookups for each row: there can be thousands of rows.
+    const onBoard = new Set(s.data.objects.map(o => o.id));
+    const connected = new Set(s.data.connections.map(suggestionKey));
+    const rows = data.connections.filter(c => onBoard.has(c.from) && onBoard.has(c.to) && !connected.has(suggestionKey(c)));
     root.append(el('div', 'board-suggest-title', `Connections (${rows.length.toLocaleString()})`));
     if (!data.similar_included) {
       root.append(button('Find similar documents', () => openSuggestions(true), {

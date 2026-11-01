@@ -524,6 +524,31 @@ test('the board', async t => {
     await page.waitForSelector('.board', { state: 'detached' });
   });
 
+  await t.test('the Suggest button leaves the slow comparison for Find similar documents', async () => {
+    const d = await makeCollection(page, 'Two steps', 30);
+    const objs = d.ids.map((id, i) => ({ id: `d${i}`, kind: 'doc', doc_id: id, x: (i % 6) * 240, y: Math.floor(i / 6) * 130 }));
+    await api(page, 'PUT', `/api/collections/${d.id}/board`, { revision: 0, board: { objects: objs } });
+    await openCollection(page, 'Two steps');
+    await page.click('.banner-board');
+    await page.waitForSelector('.board-card');
+    const asked = [];
+    const watch = r => { if (/\/board\/suggestions(\?|$)/.test(r.url())) asked.push(new URL(r.url()).search); };
+    page.on('request', watch);
+    await bar.getByRole('button', { name: 'Suggest' }).click();
+    const find = inspector.getByRole('button', { name: 'Find similar documents' });
+    await find.waitFor();
+    assert.deepEqual(asked, [''], 'plain Suggest');
+    assert.equal(await inspector.locator('.board-suggest-kind', { hasText: 'similar text' }).count(), 0);
+    await find.click();
+    await page.waitForFunction(() => document.querySelector('.board-suggest-title')?.textContent.startsWith('Connections') || document.querySelectorAll('.board-suggest-title').length > 0);
+    await inspector.locator('.board-suggest-kind', { hasText: 'similar text' }).first().waitFor();
+    assert.deepEqual(asked, ['', '?similar=1']);
+    assert.equal(await inspector.getByRole('button', { name: 'Find similar documents' }).count(), 0, 'it has been done');
+    page.off('request', watch);
+    await bar.getByRole('button', { name: 'Close' }).click();
+    await page.waitForSelector('.board', { state: 'detached' });
+  });
+
   await t.test('Suggest can apply its groups already arranged in sections', async () => {
     const d = await makeCollection(page, 'From suggest', 30);
     const objs = d.ids.map((id, i) => ({ id: `d${i}`, kind: 'doc', doc_id: id, x: (i % 6) * 240, y: Math.floor(i / 6) * 130 }));
