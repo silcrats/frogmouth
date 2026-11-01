@@ -97,7 +97,7 @@ test('no kind crowds out the rest of the suggestions', () => {
   for (let i = 0; i < 900; i++) cards.push({ id: `c${i}`, time: i, group: null, text: `${'word '.repeat(60)}${i % 3 === 0 ? 'same' : i}`, vector: unit(randomVector()), doc: { id: `smb://s/x/${i}`, filename: `f${i % 2}.pdf` } });
   const { connections, connections_total: total } = suggestBoard({ cards });
   const kinds = new Set(connections.map(c => c.kind));
-  assert.ok(connections.length <= 1000);
+  assert.ok(connections.length <= 3000);
   assert.ok(total >= connections.length);
   assert.ok(kinds.size >= 2);
 });
@@ -303,9 +303,9 @@ test('Same subject collects emails with one subject, with no one else in common'
 
 test('every set of copies gets a connection before any set gets a second', () => {
   const body = i => `this is the unique shared text of message number ${i} and it goes on for a while. `.repeat(5);
-  const big = Array.from({ length: 1100 }, (_, i) => mailCard(`big${i}`, `Big ${i}`, body('big')));
+  const big = Array.from({ length: 3100 }, (_, i) => mailCard(`big${i}`, `Big ${i}`, body('big')));
   const small = Array.from({ length: 5 }, (_, s2) => [0, 1].map(k => mailCard(`small${s2}x${k}`, `Small ${s2}`, body(`small${s2}`)))).flat();
   const copies = suggestBoard({ cards: [...big, ...small] }).connections.filter(c => c.kind === 'copy');
-  assert.ok(copies.length <= 1000);
+  assert.ok(copies.length <= 3000);
   for (let n = 0; n < 5; n++) assert.ok(copies.some(c => c.from === `small${n}x0` && c.to === `small${n}x1`), `small set ${n}`);
 });
