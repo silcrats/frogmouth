@@ -1,21 +1,35 @@
 /* The evidence board (board.js), over the whole window. Uses the page's colours. */
 body.board-open { overflow: hidden; }
 
-.board {
+/* Card and group colours, also used by the timeline's group tags. */
+:root {
   --color-default: #626a78;
   --color-teal: #5fb3a3;
   --color-amber: #d9a441;
   --color-red: #d9705f;
   --color-violet: #a48ad9;
   --color-blue: #6a9fdb;
+}
+
+.board {
+  --tray-w: var(--tray-size, 250px); --inspector-w: var(--inspector-size, 300px);
   position: fixed; inset: 0; z-index: 100; display: grid;
-  grid-template-columns: 250px minmax(0, 1fr) 300px;
+  grid-template-columns: var(--tray-w) minmax(0, 1fr) var(--inspector-w);
   grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas: "bar bar bar" "tray canvas inspector" "time time time";
   background: var(--bg); color: var(--text); font-size: 13px;
 }
-.board.no-tray { grid-template-columns: 0 minmax(0, 1fr) 300px; }
-.board.no-tray .board-tray { display: none; }
+.board.no-tray { --tray-w: 0px; }
+.board.no-tray .board-tray, .board.no-tray .board-side-handle-tray { display: none; }
+.board.no-inspector { --inspector-w: 0px; }
+.board.no-inspector .board-inspector, .board.no-inspector .board-side-handle-inspector { display: none; }
+.board button.board-side-toggle { font-family: var(--sans); font-size: 14px; line-height: 1; padding: 4px 7px; }
+/* Grabbed on the sidebar's inner edge, over its border. */
+.board-side-handle { grid-row: 2; align-self: stretch; width: 8px; z-index: 6; cursor: col-resize; touch-action: none; }
+.board-side-handle-tray { grid-column: 1; justify-self: end; margin-right: -4px; }
+.board-side-handle-inspector { grid-column: 3; justify-self: start; margin-left: -4px; }
+.board-side-handle:hover, .board-side-handle:focus-visible, .board.resizing .board-side-handle:active { background: var(--accent-dim); outline: none; }
+.board.resizing, .board.resizing * { cursor: col-resize !important; user-select: none; }
 .board [hidden] { display: none !important; }
 .board:focus { outline: none; }
 
@@ -26,7 +40,7 @@ body.board-open { overflow: hidden; }
 .board button:hover:not(:disabled), .board button.active { background: transparent; color: var(--accent); border-color: var(--accent-dim); }
 .board button:disabled { background: transparent; color: var(--border); cursor: default; }
 .board button:focus-visible, .board-card:focus-visible, .board-swatch:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
-.board input[type="text"], .board input[type="number"], .board select, .board textarea {
+.board input[type="text"], .board input[type="number"], .board input[type="date"], .board select, .board textarea {
   width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
   border-radius: 6px; font-family: var(--sans); font-size: 13px; padding: 7px 9px; color-scheme: dark;
 }
@@ -66,6 +80,52 @@ body.board-open { overflow: hidden; }
 .board-tray-title { overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .board-tray-meta { font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
 .board-tray-empty, .board-note { color: var(--text-dim); font-size: 12px; line-height: 1.45; }
+
+/* The sidebar's tabs, and Find */
+.board-side-tabs { display: flex; gap: 4px; }
+.board-side-tabs button { flex: 1; }
+.board-side-pane { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
+.board-side-pane[hidden] { display: none; }
+.board-find-form { display: flex; gap: 6px; }
+.board-find-form input { flex: 1 !important; min-width: 0; }
+.board-find-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; }
+.board-find-filters .board-field { margin-top: 6px; min-width: 0; }
+.board-find-filters .board-field select, .board-find-filters .board-field input { width: 100%; min-width: 0; }
+.board-find-filters .board-check { grid-column: 1 / -1; margin-top: 8px; font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.board-find-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.board-find-head .board-note.error { color: var(--color-red); }
+.board-find-head button { flex-shrink: 0; }
+.board-find-head button[hidden] { display: none; }
+.board-find-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.board .board-find-row {
+  display: block; width: 100%; text-align: left; font: inherit; font-size: 13px; color: var(--text); text-transform: none; letter-spacing: normal;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; cursor: pointer;
+}
+.board button.board-find-row:hover:not(:disabled) { color: var(--text); background: var(--bg); border-color: var(--highlight); }
+.board button.board-find-row.current, .board button.board-find-row.current:hover:not(:disabled) {
+  border-color: var(--highlight); background: rgba(255, 224, 138, 0.1); box-shadow: inset 3px 0 0 var(--highlight);
+}
+.board-find-snippet { margin-top: 4px; font-size: 11.5px; line-height: 1.45; color: var(--text-dim); overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.board-find-snippet mark { background: rgba(255, 224, 138, 0.25); color: var(--text); border-radius: 2px; }
+
+/* On the board: matches stand out, the rest fade (but can still be used). */
+.board-node.find-out, .board-link.find-out { opacity: 0.18; }
+.board-card.find-match, .board-group.find-match { --find-ring: 0 0 0 1.5px var(--highlight); box-shadow: var(--find-ring); }
+/* The one chosen, as its row in the list is: tinted, with a heavier ring and a glow. */
+.board-card.find-match.selected, .board-group.find-match.selected {
+  --find-ring: 0 0 0 3px var(--highlight), 0 0 22px 6px rgba(255, 224, 138, 0.45);
+  border-color: var(--highlight); background-image: linear-gradient(rgba(255, 224, 138, 0.16), rgba(255, 224, 138, 0.16));
+  box-shadow: var(--find-ring);
+}
+/* Once, when it's chosen from the list, to catch the eye. */
+.board-node.find-pulse { animation: board-find-pulse 0.8s ease-out 2; }
+@keyframes board-find-pulse {
+  from { box-shadow: var(--find-ring), 0 0 0 0 rgba(255, 224, 138, 0.8); }
+  to { box-shadow: var(--find-ring), 0 0 0 26px rgba(255, 224, 138, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .board-node.find-pulse { animation: none; } }
+.board-node.find-hover { box-shadow: 0 0 0 4px var(--highlight); }
 .board-ghost {
   position: fixed; z-index: 110; width: 200px; pointer-events: none; opacity: 0.9;
   background: var(--panel); border: 1px solid var(--accent); border-radius: 6px; padding: 6px 8px;
@@ -80,6 +140,10 @@ body.board-open { overflow: hidden; }
 .board-canvas.panning, .board-canvas.panning * { cursor: grabbing !important; }
 .board.connecting .board-canvas, .board.connecting .board-node { cursor: crosshair; }
 .board-world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
+/* Zoomed far out (board.js FAR_ZOOM): cards as plain boxes in their colours, the same
+   size as ever, as they're too small to read. What Find picks out still shows. */
+.board.far .board-card > * { visibility: hidden; }
+.board.far .board-card:not(.find-match):not(.selected) { box-shadow: none; }
 .board-links { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
 .board-empty {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
@@ -270,8 +334,9 @@ body.board-open { overflow: hidden; }
   .board-name { max-width: 140px; }
   .board-status { max-width: 240px; white-space: normal; }
   .board-tray, .board-inspector { grid-area: canvas; z-index: 5; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }
-  .board-tray { justify-self: start; width: min(250px, 85vw); }
-  .board-inspector { justify-self: end; width: min(300px, 85vw); }
+  .board-tray { justify-self: start; width: min(var(--tray-w), 85vw); }
+  .board-inspector { justify-self: end; width: min(var(--inspector-w), 85vw); }
+  .board-side-handle { display: none; }
   .board-inspector.idle { display: none; }
   .board-time { grid-template-columns: minmax(0, 1fr); }
 }

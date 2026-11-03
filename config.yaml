@@ -162,10 +162,13 @@ vector:
 #   max_download_mb  largest "Download all" zip, before compression. Files
 #                    are fetched to temporary disk one at a time, so it only
 #                    needs room for the largest file.
+#   board            the evidence board (Board button on a collection), on by
+#                    default. Turning it off hides it, but keeps saved boards.
 # ---------------------------------------------------------------------
 collections:
   db_path: "${COLLECTIONS_DB:-}"
   max_download_mb: "${COLLECTION_DOWNLOAD_MAX_MB:-2048}"
+  board: "${BOARD_ENABLED:-true}"
 
 # ---------------------------------------------------------------------
 # Sources -- one "Search in:" button each (plus "All"). host is the

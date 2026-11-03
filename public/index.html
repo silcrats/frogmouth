@@ -762,6 +762,14 @@
   }
   .header-btn.help-btn, .header-btn.help-btn:hover { color: var(--highlight); border-color: var(--highlight); background: transparent; }
   .timeline-actions { display: flex; gap: 6px; }
+  .timeline-groups { margin: 4px 0 10px; font-size: 12.5px; color: var(--text-dim); }
+  .timeline-groups select { margin-left: 6px; max-width: min(420px, 70vw); background: var(--panel); border: 1px solid var(--border); color: var(--text);
+                            font-family: var(--mono); font-size: 12px; padding: 4px 8px; border-radius: 6px; cursor: pointer; }
+  .result-meta .timeline-group-tag { color: var(--text); border-left: 3px solid var(--tone, var(--color-default)); }
+  .result-note { margin-top: 8px; padding: 6px 10px; border-left: 2px solid var(--border); font-size: 13px; line-height: 1.5; color: var(--text); }
+  .result-note-text { white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .result.open .result-note-text { display: block; -webkit-line-clamp: unset; }
+  .result-note-label { display: block; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
   .timeline-head button.active { color: var(--accent); border-color: var(--accent-dim); }
   .timeline-actions { flex-wrap: wrap; }
   .timeline-actions .timeline-divider { width: 1px; background: var(--border); margin: 0 2px; }
@@ -958,6 +966,7 @@
         <button type="button" id="selectClear">Clear</button>
         <div class="collect-wrap"><button type="button" class="select-add" id="selectAdd">Add selected to collection</button></div>
         <div class="collect-wrap"><button type="button" id="selectAddAll"></button></div>
+        <div class="collect-wrap"><button type="button" id="selectGroup" title="Put the ticked documents in a new group on this collection's board">Move to new group</button></div>
         <div class="select-message" id="selectMessage" hidden></div>
       </div>
       <div class="page-size-control">
@@ -1114,6 +1123,7 @@
   // size): the search, or a collection (set by the collections code below).
   let loadPage = start => runSearch(currentQuery, start);
   let semanticAvailable = false;
+  let boardAvailable = true;
   let currentQuery = '';
   let currentStart = 0;
   let currentTotal = 0;
@@ -1508,6 +1518,7 @@
     modeToggle.style.display = modes.length > 1 ? '' : 'none';
     setSearchMode(cfg.default_mode || 'keyword');
     semanticAvailable = modes.includes('semantic');
+    boardAvailable = cfg.board !== false;
 
     FIELD_LABELS = {};
     FILTER_PLACEHOLDERS = {};
@@ -1708,6 +1719,13 @@
       if (mimetype) metaParts.push(`<span>${escapeHtml(mimetype)}</span>`);
       if (created) metaParts.push(`<span>${collectionView === 'timeline' ? `${dateSource(doc, isMail)}: ` : ''}${created}</span>`);
       if (allOf(doc.email_attachments).length) metaParts.push(`<span title="Has attachments">&#128206; ${allOf(doc.email_attachments).length}</span>`);
+      // On the timeline, what the board says about this document: its group and your note.
+      const boardCard = collectionView === 'timeline' && data.cards ? data.cards[doc.id] : null;
+      if (boardCard && boardCard.group) {
+        metaParts.unshift(`<span class="timeline-group-tag color-${escapeHtml(boardCard.group.color)}" title="Its group on the board">${escapeHtml(boardCard.group.title)}</span>`);
+      }
+      const noteHtml = boardCard && boardCard.note.trim()
+        ? `<div class="result-note"><span class="result-note-label">Your note</span><div class="result-note-text">${escapeHtml(boardCard.note)}</div></div>` : '';
 
       // Build the full-detail fields shown once expanded. Anything not
       // present on this doc is simply skipped rather than shown blank.
@@ -1789,6 +1807,7 @@
         </div>
         ${metaParts.length ? `<div class="result-meta">${metaParts.join('')}</div>` : ''}
         <div class="result-snippet">${hl || '<em>No preview available</em>'}</div>
+        ${noteHtml}
         <div class="result-detail" style="display:none;">
           <div class="detail-grid">${detailGridHtml}</div>
           <div class="detail-body-label">Full content</div>
@@ -2004,6 +2023,7 @@
   let collectionView = null;    // 'items', 'timeline', 'semantic' or 'keyword'
   const timelineEl = document.getElementById('timeline');
   let timelineRange = null;     // { from, to } while zoomed in on part of the timeline
+  let timelineGroup = '';       // the board group the timeline is narrowed to; 'none' for no group
   let timelineHistory = [];     // the ranges zoomed in from, for going back; null is all dates
   let timelineData = null;      // the latest response, to redraw when switching chart
   const TIMELINE_SHAPE_KEY = 'frogmouth.timelineShape';
@@ -2247,6 +2267,7 @@
   const selectCount = document.getElementById('selectCount');
   const selectPageBtn = document.getElementById('selectPage');
   const selectClearBtn = document.getElementById('selectClear');
+  const selectGroupBtn = document.getElementById('selectGroup');
   const selectAddBtn = document.getElementById('selectAdd');
   const selectAddAllBtn = document.getElementById('selectAddAll');
   const selectMessage = document.getElementById('selectMessage');
@@ -2270,6 +2291,7 @@
     selectPageBtn.textContent = checks.length && checks.every(c => c.checked) ? 'Unselect page' : 'Select page';
     selectClearBtn.hidden = !n;
     selectAddBtn.hidden = !n;
+    selectGroupBtn.hidden = !n || !openCollection || collectionView !== 'timeline' || !boardAvailable;
     // Only a search has a set of results to add: a collection's documents are
     // already in one, and "more like these" isn't a search that can be re-run.
     const canAddAll = (openCollection ? collectionView === 'items' && collectionSearchActive() : hasSearched) && currentTotal > 0;
@@ -2402,6 +2424,41 @@
       return result;
     });
   });
+  // Ticked documents on the timeline, into a new group on the collection's board,
+  // which lays it out when it next opens.
+  selectGroupBtn.addEventListener('click', () => {
+    const wrap = selectGroupBtn.parentElement;
+    if (wrap.querySelector('.collect-menu')) return closeCollectMenus();
+    closeCollectMenus();
+    const collection = openCollection;
+    const menu = document.createElement('div');
+    menu.className = 'collect-menu';
+    menu.innerHTML = `<div class="menu-title">Put ${escapeHtml(plural(selectedDocs.size, 'selected document'))} in a new group on the board. Any already in a group move out of it.</div>
+      <form class="collection-new"><input type="text" placeholder="Group name" maxlength="200" autocomplete="off" aria-label="Group name"><button type="submit">Make group</button></form>`;
+    const form = menu.querySelector('form');
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const title = form.querySelector('input').value.trim();
+      if (!title) return;
+      form.querySelector('button').disabled = true;
+      try {
+        const result = await collectionsApi('POST', `/api/collections/${collection.id}/board/groups`, { ids: [...selectedDocs], title });
+        closeCollectMenus();
+        selectedDocs.clear();
+        pageChecks().forEach(c => setChecked(c, false));
+        // The cards' tags show the move; only what was left out needs saying.
+        selectMessage.textContent = result.skipped
+          ? `Left out ${plural(result.skipped, 'ticked document')} not in this collection.` : '';
+        selectMessage.hidden = !result.skipped;
+        collectionChanged(collection.id);
+      } catch (err) {
+        form.querySelector('button').disabled = false;
+        showInlineError(form, err.message);
+      }
+    });
+    wrap.appendChild(menu);
+    form.querySelector('input').focus();
+  });
   selectAddAllBtn.addEventListener('click', () => {
     const params = currentFilterParams();
     params.set('q', currentQuery);
@@ -2424,7 +2481,7 @@
     collectionBanner.innerHTML = `<span class="banner-title">Collection: <strong>${escapeHtml(openCollection.name)}</strong></span>
       <div class="banner-views">${views.map(([v, label]) =>
         `<button type="button" data-view="${v}" class="${v === collectionView ? 'active' : ''}">${label}</button>`
-        + (v === 'timeline' ? `<button type="button" class="banner-board" title="Arrange this collection's documents on a board, with notes, groups, connections and a timeline">Board</button>` : '')).join('')}</div>
+        + (v === 'timeline' && boardAvailable ? `<button type="button" class="banner-board" title="Arrange this collection's documents on a board, with notes, groups, connections and a timeline">Board</button>` : '')).join('')}</div>
       <button type="button" class="banner-download" title="Download this collection's files as one zip">&#8595; Download all</button>
       <button type="button" class="banner-back">Back to search</button>
       ${openCollection.description ? `<div class="banner-desc">${escapeHtml(openCollection.description)}</div>` : ''}`;
@@ -2433,7 +2490,7 @@
       else if (b.dataset.view === 'timeline') { resetTimelineZoom(); showTimeline(0); }
       else showSimilar(b.dataset.view, 0);
     }));
-    collectionBanner.querySelector('.banner-board').addEventListener('click', () => {
+    collectionBanner.querySelector('.banner-board')?.addEventListener('click', () => {
       openBoard(openCollection, () => collectionChanged(openCollection.id));
     });
     collectionBanner.querySelector('.banner-download').addEventListener('click', e => downloadCollection(e.currentTarget));
@@ -2500,7 +2557,10 @@
     if (!openCollection) {
       mainSearch = { query: input.value, lines: queryArea.value, rows: filterRows, logic: filterLogic, scope: searchScope, mode: searchMode };
     }
-    if (switched) setSearchInputs(emptySearch());
+    if (switched) {
+      setSearchInputs(emptySearch());
+      timelineGroup = '';
+    }
     openCollection = c;
     collectionView = 'items';
     renderBanner();
@@ -2539,8 +2599,11 @@
       params.set('from', timelineRange.from);
       params.set('to', timelineRange.to);
     }
+    if (timelineGroup) params.set('group', timelineGroup);
     const searching = collectionSearchActive();
     return showView(`/api/collections/${openCollection.id}/timeline?${params}`, start, data => {
+      // A group since deleted from the board comes back as all of them.
+      if (data.board) timelineGroup = data.board.group;
       if (collectionView === 'timeline') renderTimeline(data);
       const n = data.numFound;
       if (searching) return `${n.toLocaleString()} match${n === 1 ? '' : 'es'} in this collection, oldest first`;
@@ -2925,6 +2988,31 @@
     return unit === 'decade' ? `${bucket.start.slice(0, 4)}s` : bucket.start.slice(0, 4);
   }
 
+  // A picker for the board's groups, when the board has any: the chart and the
+  // cards then cover just that group's documents, or those in none.
+  function renderTimelineGroups(data) {
+    const board = data.board;
+    if (!board || !board.groups.length) return;
+    const option = (value, label, count) =>
+      `<option value="${escapeHtml(value)}"${value === timelineGroup ? ' selected' : ''}>${escapeHtml(label)} (${count.toLocaleString()})</option>`;
+    const total = board.ungrouped + board.groups.reduce((sum, g) => sum + g.count, 0);
+    const row = document.createElement('div');
+    row.className = 'timeline-groups';
+    row.innerHTML = `<label>Board group
+        <select class="timeline-group-select">
+          ${option('', 'All documents', total)}
+          ${option('none', 'Not in a group', board.ungrouped)}
+          ${board.groups.map(g => option(g.id, g.title, g.count)).join('')}
+        </select>
+      </label>`;
+    row.querySelector('select').addEventListener('change', e => {
+      timelineGroup = e.target.value;
+      resetTimelineZoom();
+      showTimeline(0);
+    });
+    timelineEl.querySelector('.timeline-head').after(row);
+  }
+
   // The chart above the list: a square per period (like a contribution graph)
   // or a bar per period, whichever this browser last chose. Clicking one or
   // dragging across several zooms the chart and the list in on that range.
@@ -2953,6 +3041,7 @@
           <button type="button" class="timeline-hints-btn ${timelineHints ? 'active' : ''}" aria-expanded="${timelineHints}" title="How to use this chart">Hints</button>
         </div>
       </div>`;
+    renderTimelineGroups(data);
     timelineEl.querySelectorAll('[data-cards]').forEach(b => b.addEventListener('click', () => {
       timelineCardsWay = b.dataset.cards;
       savePref(TIMELINE_CARDS_KEY, timelineCardsWay);
@@ -3341,6 +3430,7 @@
     document.getElementById('searchEverything').hidden = true;
     applyTimelineCards();
     resetTimelineZoom();
+    timelineGroup = '';
     loadPage = s => runSearch(currentQuery, s);
     if (was) refreshPanelIfOpen();
   }

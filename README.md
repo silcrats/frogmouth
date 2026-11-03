@@ -36,10 +36,15 @@ so it can front any index that carries per-document roles.
   the chart to zoom in. Its cards run down or across, can all be expanded, and
   a diamond marks the focused card on the chart. A collection's files can be
   downloaded as one zip. Search and filters work inside an open collection.
+  The timeline can be narrowed to one of the board's groups, and its cards show
+  each document's group and the notes written on its board card. Ticked cards
+  can be moved into a new board group from there.
 - An evidence board for each collection: lay out its documents on a canvas
   with notes, people, places, organisations and events, frame them in groups,
   draw labelled connections, and step through time with a date-range slider.
   Named versions keep copies of a board to go back to.
+  Find searches a board's documents and notes, with filters, outlining the
+  matches and listing them in the sidebar.
   Suggestions propose connections (attachments, threads, identical text, named
   people and places, similar wording) and groupings, with reasons, for the user
   to accept. They use metadata and text, and don't need vector search. With it
@@ -93,7 +98,7 @@ come from the environment.
 | `filters`, `types` | Filter list; file-type aliases and groups |
 | `downloads` | Downloaders by URL scheme (`smb`, using a `shares.yaml`) |
 | `vector` | Semantic and hybrid search (`VECTOR_ENABLED`), off by default. Needs Pelican's vector search; adds a Keyword / Semantic / Hybrid switch, and improves board suggestions |
-| `collections` | Where users' collections are stored: an SQLite file, `data/collections.db` by default (`/app/data` in the image; `COLLECTIONS_DB` to move it) |
+| `collections` | Where users' collections are stored: an SQLite file, `data/collections.db` by default (`/app/data` in the image; `COLLECTIONS_DB` to move it), and whether to offer the evidence board (`BOARD_ENABLED`, on by default) |
 
 Collections live in that file, so keep it on a volume and back it up: the
 compose example mounts the `frogmouth-data` volume at `/app/data`. Without

@@ -16,7 +16,7 @@ const freePort = () => new Promise((resolve, reject) => {
   });
 });
 
-async function startApp({ vector = false, docVectors = false } = {}) {
+async function startApp({ vector = false, docVectors = false, board = true } = {}) {
   const [port, osPort] = [await freePort(), await freePort()];
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'frogmouth-test-'));
   const dbPath = path.join(dir, 'collections.db');
@@ -25,7 +25,7 @@ async function startApp({ vector = false, docVectors = false } = {}) {
     env: {
       ...process.env, NODE_NO_WARNINGS: '1', PORT: String(port), STUB_OS_PORT: String(osPort), CONFIG_PATH: path.join(ROOT, 'config.yaml'),
       COLLECTIONS_DB: dbPath, SESSION_SECRET: 'x'.repeat(40), OS_HOST: `http://127.0.0.1:${osPort}`, LDAP_URL: 'ldap://stand-in:389',
-      VECTOR_ENABLED: vector ? 'true' : 'false', ...(docVectors && { STUB_DOC_VECTORS: '1' }), OS_USERNAME: '', OS_PASSWORD: '', OS_CA_CERTS: '',
+      VECTOR_ENABLED: vector ? 'true' : 'false', BOARD_ENABLED: board ? 'true' : 'false', ...(docVectors && { STUB_DOC_VECTORS: '1' }), OS_USERNAME: '', OS_PASSWORD: '', OS_CA_CERTS: '',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

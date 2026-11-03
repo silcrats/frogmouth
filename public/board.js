@@ -25,6 +25,9 @@
   const MIN_GROUP_W = 160;
   const MIN_GROUP_H = 100;
   const MIN_ZOOM = 0.05;
+  // Below this, cards are drawn as plain boxes: their text is too small to read,
+  // and drawing thousands of them made moving around slow.
+  const FAR_ZOOM = 0.4;
   const MAX_ZOOM = 2.5;
   const HISTORY = 50;
   const SAVE_DELAY = 800;
@@ -35,6 +38,12 @@
   const PLAY_STEPS = 200;
   const SHOW_TEXT_KEY = 'frogmouth.boardShowText';
   const HIDE_KEY = 'frogmouth.boardHideOut';
+  // The sidebars' widths, and whether the right one is hidden, as last left in this browser.
+  const SIDES = {
+    tray: { key: 'frogmouth.boardTrayWidth', css: '--tray-size', width: 250, min: 180 },
+    inspector: { key: 'frogmouth.boardInspectorWidth', css: '--inspector-size', width: 300, min: 220 },
+  };
+  const NO_INSPECTOR_KEY = 'frogmouth.boardNoInspector';
   const KINDS = { doc: 'Document', note: 'Note', person: 'Person', place: 'Place', org: 'Organisation', event: 'Event' };
   const COLORS = ['default', 'teal', 'amber', 'red', 'violet', 'blue'];
   const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -109,12 +118,17 @@
     root.setAttribute('aria-label', `Board for ${collection.name}`);
     root.classList.toggle('hide-out', loadPref(HIDE_KEY) === '1');
     root.classList.toggle('no-tray', window.matchMedia('(max-width: 1000px)').matches);
+    root.classList.toggle('no-inspector', loadPref(NO_INSPECTOR_KEY) === '1');
+    Object.entries(SIDES).forEach(([side, { key }]) => {
+      const saved = Number(loadPref(key));
+      if (saved) setSideWidth(root, side, saved);
+    });
     s = {
       collection, onClose, root, data: { objects: [], groups: [], connections: [] }, docs: {}, items: [], hiddenItems: 0,
       revision: 0, view: { x: 0, y: 0, k: 1 }, selected: new Set(), selectedLink: null, connecting: null,
       undo: [], redo: [], snapshot: '', savedJson: '', saveTimer: null, retryTimer: null, saving: false, conflict: false,
       saveFailed: false, closeArmed: false, range: null, bounds: null, nodes: new Map(), sizes: new Map(), trayFilter: '',
-      playTimer: null, loaded: false, cleanups: [],
+      playTimer: null, loaded: false, cleanups: [], find: emptyFind(),
     };
     buildShell();
     document.body.appendChild(root);
@@ -158,12 +172,39 @@
         fitView();
       }
       s.savedView = JSON.stringify(s.view);
+      layOutPending();
     } catch (err) {
       if (s !== board) return;
       setStatus(`Couldn't load the board: ${err.message}`, true);
       s.els.empty.textContent = 'This board could not be loaded. Close it and try again.';
       s.els.empty.hidden = false;
     }
+  }
+
+  // Groups made on the timeline, laid out now that card sizes are known: in a row
+  // to the right of everything else, with room made around them, and shown. This
+  // isn't an undo step (undoing it would pile the cards up), but it's saved.
+  function layOutPending() {
+    const pending = s.data.groups.filter(g => g.pending);
+    if (!pending.length) return;
+    const pendingIds = new Set(pending.map(g => g.id));
+    const settled = [...s.data.groups.filter(g => !g.pending), ...s.data.objects.filter(o => !pendingIds.has(o.group))]
+      .map(item => rectOf(item.id)).filter(Boolean);
+    let x = settled.length ? Math.max(...settled.map(r => r.x + r.w)) + 80 : 0;
+    const y = settled.length ? Math.min(...settled.map(r => r.y)) : 0;
+    for (const g of pending) {
+      delete g.pending;
+      Object.assign(g, { x, y });
+      layOutGroup(g);
+      makeRoomFor(g);
+      x = g.x + g.w + GROUP_MARGIN;
+    }
+    s.snapshot = JSON.stringify(s.data);
+    renderAll();
+    select([...pendingIds]);
+    fitView([...pendingIds]);
+    scheduleSave();
+    setStatus(pending.length === 1 ? `Laid out "${pending[0].title}", grouped on the timeline.` : `Laid out ${pending.length} groups made on the timeline.`);
   }
 
   async function closeBoard() {
@@ -310,6 +351,7 @@
   // ----- The page's structure -----
   function buildShell() {
     const { root } = s;
+    s.els = {};
     const bar = el('div', 'board-bar');
     const name = el('div', 'board-name', s.collection.name);
     const tools = el('div', 'board-tools');
@@ -324,8 +366,13 @@
     const resetBoard = button('Reset board', () => openPanel({ reset: true }), { title: 'Clear the board and start again' });
     edit.append(suggest, group, connect, undo, redo, resetBoard);
     const viewTools = el('div', 'board-tools');
-    const tray = button('Tray', () => root.classList.toggle('no-tray'), { title: 'Show or hide the documents not on the board' });
-    viewTools.append(tray, button('Fit', fitView, { title: 'Bring everything into view' }),
+    // Small, as the toolbar is full: a square with that side filled in.
+    const tray = button('\u25E7', () => root.classList.toggle('no-tray'), { className: 'board-side-toggle', title: 'Show or hide the left sidebar: Find, and the documents not on the board' });
+    tray.setAttribute('aria-label', 'Left panel');
+    const side = button('\u25E8', () => showInspector(root.classList.contains('no-inspector')), { className: 'board-side-toggle', title: 'Show or hide the right sidebar, with the details of what\'s selected' });
+    side.setAttribute('aria-label', 'Right panel');
+    const find = button('Find', () => showSide('find', true), { title: 'Search and filter what\'s on the board (Ctrl+F)' });
+    viewTools.append(find, tray, side, button('Fit', fitView, { title: 'Bring everything into view' }),
       button('−', () => zoomBy(1 / 1.25), { title: 'Zoom out' }), button('+', () => zoomBy(1.25), { title: 'Zoom in' }));
     const status = el('div', 'board-status');
     status.setAttribute('aria-live', 'polite');
@@ -354,7 +401,14 @@
     trayFilter.addEventListener('input', () => { s.trayFilter = trayFilter.value.trim().toLowerCase(); renderTray(); });
     const trayList = el('div', 'board-tray-list');
     const trayNote = el('div', 'board-note');
-    trayEl.append(trayHead, trayFilter, trayList, trayNote);
+    // The sidebar: Find, or the documents not on the board yet.
+    const tabs = el('div', 'board-side-tabs');
+    const findTab = button('Find', () => showSide('find'), { className: 'board-side-tab' });
+    const trayTab = button('Not on board', () => showSide('tray'), { className: 'board-side-tab', title: 'The collection\'s documents not on the board yet' });
+    tabs.append(findTab, trayTab);
+    const trayPane = el('div', 'board-side-pane');
+    trayPane.append(trayHead, trayFilter, trayList, trayNote);
+    trayEl.append(tabs, trayPane, buildFind());
 
     const canvas = el('div', 'board-canvas');
     const world = el('div', 'board-world');
@@ -369,9 +423,10 @@
     const inspector = el('aside', 'board-inspector');
     const time = el('div', 'board-time');
 
-    root.append(bar, trayEl, canvas, inspector, time);
-    s.els = { save, name, undo, redo, connect, group, status, statusText, reload, close, trayList, trayNote, trayTitle, placeAll,
-              canvas, world, groupsLayer, links, cardsLayer, empty, inspector, time };
+    root.append(bar, trayEl, canvas, inspector, time, sideHandle('tray'), sideHandle('inspector'));
+    Object.assign(s.els, { save, name, undo, redo, connect, group, status, statusText, reload, close, trayList, trayNote, trayTitle, placeAll,
+              canvas, world, groupsLayer, links, cardsLayer, empty, inspector, time, findTab, trayTab, trayPane });
+    showSide('tray', false, false);
 
     canvas.addEventListener('pointerdown', onCanvasDown);
     // Otherwise the middle button starts the browser's own autoscroll.
@@ -391,6 +446,8 @@
     renderTray();
     renderTime();
     applyRange();
+    refreshFindChoices();
+    applyFind();
     updateToolbar();
     s.els.empty.hidden = s.data.objects.length + s.data.groups.length > 0;
     if (!s.els.empty.hidden) return;
@@ -576,6 +633,7 @@
   function applyView() {
     const { x, y, k } = s.view;
     s.els.world.style.transform = `translate(${x}px, ${y}px) scale(${k})`;
+    s.root.classList.toggle('far', k < FAR_ZOOM);
     const step = 24 * k;
     s.els.canvas.style.backgroundSize = `${step}px ${step}px`;
     s.els.canvas.style.backgroundPosition = `${x}px ${y}px`;
@@ -616,8 +674,10 @@
     zoomAround(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015));
   }
 
-  function fitView() {
-    const rects = [...s.nodes.keys()].map(rectOf).filter(Boolean);
+  // Everything in view, or just these.
+  function fitView(ids) {
+    // Also a button's handler, given its click event.
+    const rects = (Array.isArray(ids) ? ids : [...s.nodes.keys()]).map(rectOf).filter(Boolean);
     const r = s.els.canvas.getBoundingClientRect();
     if (!rects.length) {
       s.view = { x: r.width / 2, y: r.height / 2, k: 1 };
@@ -648,6 +708,7 @@
     s.selectedLink = link;
     s.nodes.forEach((node, id) => node.classList.toggle('selected', s.selected.has(id)));
     s.els.links.querySelectorAll('.board-link').forEach(g => g.classList.toggle('selected', g.dataset.link === link));
+    markFindRows(true);
     updateToolbar();
     renderInspector();
   }
@@ -690,6 +751,10 @@
         marquee.style.height = `${Math.abs(ev.clientY - startY)}px`;
       } else {
         canvas.classList.add('panning');
+        // Zoomed far out, drawn once and moved while it's only moving: not for good,
+        // as text drawn like that stays blurred after zooming in, and not close up,
+        // where the board is far bigger than the window and that's slower.
+        if (s.view.k < FAR_ZOOM) s.els.world.style.willChange = 'transform';
         s.view = { ...original, x: original.x + ev.clientX - startX, y: original.y + ev.clientY - startY };
         applyView();
       }
@@ -699,6 +764,7 @@
       canvas.removeEventListener('pointerup', onUp);
       canvas.removeEventListener('pointercancel', onUp);
       canvas.classList.remove('panning');
+      s.els.world.style.willChange = '';
       if (marquee) {
         marquee.remove();
         const end = worldAt(ev.clientX, ev.clientY);
@@ -1002,6 +1068,342 @@
     commit();
     select([g.id]);
     s.els.inspector.querySelector('input[type="text"]')?.focus();
+  }
+
+  // ----- Sidebars -----
+  function setSideWidth(root, side, width) {
+    const { css, min } = SIDES[side];
+    const max = Math.max(min, Math.round(window.innerWidth * 0.45));
+    const clamped = Math.round(Math.min(max, Math.max(min, width)));
+    root.style.setProperty(css, `${clamped}px`);
+    return clamped;
+  }
+
+  // Its width when shown: --tray-size and --inspector-size, as hiding sets the column to 0.
+  const sideWidth = side => parseInt(s.root.style.getPropertyValue(SIDES[side].css), 10) || SIDES[side].width;
+
+  function showInspector(on) {
+    s.root.classList.toggle('no-inspector', !on);
+    savePref(NO_INSPECTOR_KEY, on ? '0' : '1');
+  }
+
+  // A handle on a sidebar's inner edge: drag it, or use the arrow keys, to change
+  // its width; double-click it for the usual width.
+  function sideHandle(side) {
+    const handle = el('div', `board-side-handle board-side-handle-${side}`);
+    handle.tabIndex = 0;
+    handle.setAttribute('role', 'separator');
+    handle.setAttribute('aria-orientation', 'vertical');
+    handle.setAttribute('aria-label', side === 'tray' ? 'Resize the left sidebar' : 'Resize the right sidebar');
+    handle.title = 'Drag to resize; double-click for the usual width';
+    const sign = side === 'tray' ? 1 : -1;  // which way widens it
+    const keep = width => savePref(SIDES[side].key, String(setSideWidth(s.root, side, width)));
+    handle.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      handle.setPointerCapture(e.pointerId);
+      const [startX, startW] = [e.clientX, sideWidth(side)];
+      s.root.classList.add('resizing');
+      const move = ev => setSideWidth(s.root, side, startW + sign * (ev.clientX - startX));
+      const up = () => {
+        handle.removeEventListener('pointermove', move);
+        handle.removeEventListener('pointerup', up);
+        handle.removeEventListener('pointercancel', up);
+        s.root.classList.remove('resizing');
+        keep(sideWidth(side));
+      };
+      handle.addEventListener('pointermove', move);
+      handle.addEventListener('pointerup', up);
+      handle.addEventListener('pointercancel', up);
+    });
+    handle.addEventListener('dblclick', () => keep(SIDES[side].width));
+    handle.addEventListener('keydown', e => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      e.stopPropagation();
+      keep(sideWidth(side) + (e.key === 'ArrowRight' ? sign : -sign) * 20);
+    });
+    return handle;
+  }
+
+  // ----- Find -----
+  // Searching the documents' text (on the server) and the board's own titles and
+  // notes, narrowed by filters. Matches stand out on the board and are listed in
+  // the sidebar; everything else fades. Nothing here changes the board.
+  const FIND_ROWS = 500;
+  const emptyFind = () => ({ q: '', mode: 'keyword', kind: '', type: '', group: '', from: '', notes: false, after: null, before: null,
+    docIds: null, highlighting: {}, busy: false, error: '', run: 0, matched: null });
+
+  // opening: also shows the sidebar if it's hidden.
+  function showSide(which, focus, opening = true) {
+    if (opening) s.root.classList.remove('no-tray');
+    s.els.findPane.hidden = which !== 'find';
+    s.els.trayPane.hidden = which !== 'tray';
+    s.els.findTab.classList.toggle('active', which === 'find');
+    s.els.trayTab.classList.toggle('active', which === 'tray');
+    if (focus) s.els.findInput.focus();
+  }
+
+  function buildFind() {
+    const pane = el('div', 'board-side-pane board-find');
+    const form = el('form', 'board-find-form');
+    const input = el('input');
+    input.type = 'text';
+    input.placeholder = 'Search the board…';
+    input.setAttribute('aria-label', 'Search the board');
+    const go = el('button', null, 'Find');
+    go.type = 'submit';
+    form.append(input, go);
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      runFind();
+    });
+    const select = (label, options, onChange) => {
+      const control = el('select');
+      options.forEach(([value, text]) => control.append(new Option(text, value)));
+      control.addEventListener('change', () => onChange(control.value));
+      return { control, wrap: field(label, control) };
+    };
+    const labels = { keyword: 'Keyword', semantic: 'Semantic', advanced: 'Advanced' };
+    const modes = ((typeof CONFIG !== 'undefined' && CONFIG.search_modes) || ['keyword']).filter(m => labels[m]);
+    const mode = select('Search by', modes.map(m => [m, labels[m]]), value => {
+      s.find.mode = value;
+      if (s.find.q) runFind();
+    });
+    const kind = select('Kind', [['', 'Everything'], ...Object.entries(KINDS).map(([k, label]) => [k, k === 'doc' ? 'Documents' : `${label === 'Person' ? 'People' : `${label}s`}`])],
+      value => setFind({ kind: value }));
+    const type = select('File type', [['', 'Any']], value => setFind({ type: value }));
+    const group = select('Group', [['', 'Any']], value => setFind({ group: value }));
+    const from = el('input');
+    from.type = 'text';
+    from.placeholder = 'e.g. smith';
+    from.addEventListener('input', () => setFind({ from: from.value.trim().toLowerCase() }));
+    // Days, inclusive, by the date each item has on the board's timeline.
+    const dateInput = (key, label) => {
+      const input = el('input');
+      input.type = 'date';
+      input.addEventListener('change', () => setFind({ [key]: input.value ? toDay(Date.parse(`${input.value}T00:00:00Z`)) : null }));
+      return { input, wrap: field(label, input) };
+    };
+    const after = dateInput('after', 'Date from');
+    const before = dateInput('before', 'Date to');
+    const notesBox = el('input');
+    notesBox.type = 'checkbox';
+    notesBox.addEventListener('change', () => setFind({ notes: notesBox.checked }));
+    const notes = el('label', 'board-check');
+    notes.append(notesBox, document.createTextNode(' Only cards with notes'));
+    const filters = el('div', 'board-find-filters');
+    filters.append(mode.wrap, kind.wrap, type.wrap, group.wrap, after.wrap, before.wrap, field('Sender', from), notes);
+    const head = el('div', 'board-find-head');
+    const summary = el('div', 'board-note');
+    summary.setAttribute('aria-live', 'polite');
+    const clear = button('Clear', clearFind, { title: 'Show everything again' });
+    head.append(summary, clear);
+    const list = el('div', 'board-find-list');
+    pane.append(form, filters, head, list);
+    Object.assign(s.els, { findPane: pane, findInput: input, findMode: mode.control, findKind: kind.control, findType: type.control,
+      findGroup: group.control, findFrom: from, findAfter: after.input, findBefore: before.input, findNotes: notesBox, findSummary: summary, findClear: clear, findList: list });
+    return pane;
+  }
+
+  function setFind(change) {
+    Object.assign(s.find, change);
+    applyFind();
+  }
+
+  function clearFind() {
+    s.find = { ...emptyFind(), mode: s.find.mode, run: s.find.run + 1 };
+    const { findInput, findKind, findType, findGroup, findFrom, findAfter, findBefore, findNotes } = s.els;
+    findInput.value = findFrom.value = findAfter.value = findBefore.value = '';
+    findKind.value = findType.value = findGroup.value = '';
+    findNotes.checked = false;
+    applyFind();
+  }
+
+  // The documents' text is searched on the server; titles and notes here.
+  async function runFind() {
+    const board = s;
+    const f = s.find;
+    const q = s.els.findInput.value.trim();
+    const run = ++f.run;
+    Object.assign(f, { q, mode: s.els.findMode.value, docIds: null, highlighting: {}, error: '', busy: Boolean(q) });
+    applyFind();
+    if (!q) return;
+    try {
+      const params = new URLSearchParams({ q });
+      if (f.mode !== 'keyword') params.set('mode', f.mode);
+      const data = await collectionsApi('GET', `${boardUrl()}/search?${params}`);
+      if (s !== board || f !== s.find || f.run !== run) return;
+      Object.assign(f, { docIds: data.ids, highlighting: data.highlighting || {} });
+    } catch (err) {
+      if (s !== board || f !== s.find || f.run !== run) return;
+      Object.assign(f, { docIds: [], error: err.message });
+    }
+    f.busy = false;
+    applyFind();
+  }
+
+  const findActive = () => { const f = s.find; return Boolean(f.q || f.kind || f.type || f.group || f.from || f.notes || f.after !== null || f.before !== null); };
+  const docType = doc => String(firstOf(doc.type) || '').toLowerCase();
+
+  function findMatch(o, docSet) {
+    const f = s.find;
+    const doc = o.kind === 'doc' ? s.docs[o.doc_id] : null;
+    if (f.kind && o.kind !== f.kind) return false;
+    if (f.type && !(doc && docType(doc) === f.type)) return false;
+    if (f.group && (f.group === 'none' ? groupById(o.group) : o.group !== f.group)) return false;
+    if (f.from && !(doc && allOf(doc.email_from).join(' ').toLowerCase().includes(f.from))) return false;
+    if (f.notes && !(o.text || '').trim()) return false;
+    if (f.after !== null || f.before !== null) {
+      // Something with no date can't be said to fall in a period.
+      const t = timeOf(o);
+      if (t === null || (f.after !== null && toDay(t) < f.after) || (f.before !== null && toDay(t) > f.before)) return false;
+    }
+    if (!f.q) return true;
+    // Keyword searches also look at what you wrote: a card's notes, an object's title.
+    if (f.mode === 'keyword' && `${o.title || ''}\n${o.text || ''}`.toLowerCase().includes(f.q.toLowerCase())) return true;
+    return Boolean(doc) && docSet.has(o.doc_id);
+  }
+
+  // The choices that depend on what's on the board, keeping what's chosen if it's still there.
+  function refreshFindChoices() {
+    const { findType, findGroup } = s.els;
+    if (!findType) return;
+    const types = [...new Set(s.data.objects.filter(o => o.kind === 'doc' && s.docs[o.doc_id]).map(o => docType(s.docs[o.doc_id])).filter(Boolean))].sort();
+    const fill = (control, options, key) => {
+      const keep = s.find[key];
+      control.replaceChildren(...options.map(([value, text]) => new Option(text, value)));
+      if (options.some(([value]) => value === keep)) control.value = keep;
+      else s.find[key] = control.value = '';
+    };
+    fill(findType, [['', 'Any'], ...types.map(t => [t, t])], 'type');
+    fill(findGroup, [['', 'Any'], ['none', 'Not in a group'], ...s.data.groups.map(g => [g.id, g.title || 'Untitled group'])], 'group');
+  }
+
+  function applyFind() {
+    if (!s.els.findList) return;
+    const active = findActive();
+    const docSet = new Set(s.find.docIds || []);
+    const matched = active ? new Set(s.data.objects.filter(o => findMatch(o, docSet)).map(o => o.id)) : null;
+    s.find.matched = matched;
+    // A group stays clear while anything in it matches, and stands out if it's collapsed.
+    const hitGroups = new Set();
+    if (matched) s.data.objects.forEach(o => { if (o.group && matched.has(o.id)) hitGroups.add(o.group); });
+    const shown = id => matched.has(id) || hitGroups.has(id);
+    s.data.objects.forEach(o => {
+      const node = s.nodes.get(o.id);
+      if (!node) return;
+      node.classList.toggle('find-match', Boolean(matched) && matched.has(o.id));
+      node.classList.toggle('find-out', Boolean(matched) && !matched.has(o.id));
+    });
+    s.data.groups.forEach(g => {
+      const node = s.nodes.get(g.id);
+      if (!node) return;
+      node.classList.toggle('find-match', Boolean(matched) && g.collapsed && hitGroups.has(g.id));
+      node.classList.toggle('find-out', Boolean(matched) && !hitGroups.has(g.id));
+    });
+    const links = new Map(s.data.connections.map(c => [c.id, c]));
+    s.els.links.querySelectorAll('.board-link').forEach(shape => {
+      const c = links.get(shape.dataset.link);
+      shape.classList.toggle('find-out', Boolean(matched && c) && !(shown(c.from) && shown(c.to)));
+    });
+    renderFindList();
+  }
+
+  function renderFindList() {
+    const f = s.find;
+    const { findSummary, findList, findClear } = s.els;
+    findClear.hidden = !findActive() && !s.els.findInput.value;
+    if (!findActive()) {
+      findSummary.textContent = 'Search the text of the documents on the board, and the titles and notes of everything on it. Or choose a filter.';
+      findList.replaceChildren();
+      return;
+    }
+    if (f.busy) {
+      findSummary.textContent = 'Searching…';
+      findList.replaceChildren();
+      return;
+    }
+    const rank = new Map((f.docIds || []).map((id, i) => [id, i]));
+    const rankOf = o => (o.kind === 'doc' && rank.has(o.doc_id) ? rank.get(o.doc_id) : Infinity);
+    const time = o => timeOf(o) ?? Infinity;
+    const found = s.data.objects.filter(o => f.matched.has(o.id))
+      .sort((a, b) => rankOf(a) - rankOf(b) || time(a) - time(b) || (a.id < b.id ? -1 : 1));
+    const total = s.data.objects.length;
+    findSummary.textContent = f.error ? f.error
+      : `${found.length.toLocaleString()} of ${total.toLocaleString()} item${total === 1 ? '' : 's'} on the board match`
+        + (found.length > FIND_ROWS ? `; the first ${FIND_ROWS} are listed.` : '.');
+    findSummary.classList.toggle('error', Boolean(f.error));
+    findList.replaceChildren(...found.slice(0, FIND_ROWS).map(buildFindRow));
+    markFindRows(false);
+  }
+
+  // The rows for what's selected on the board, scrolled to if asked. A card in a
+  // collapsed group is selected as its group, so that counts only for the row chosen.
+  function markFindRows(scroll) {
+    if (!s.els.findList) return;
+    let first = null;
+    s.els.findList.querySelectorAll('.board-find-row').forEach(row => {
+      const id = row.dataset.id;
+      const on = s.selected.has(id) || (s.find.current === id && s.selected.has(drawnId(id)));
+      row.classList.toggle('current', on);
+      row.setAttribute('aria-current', String(on));
+      if (on && !first) first = row;
+    });
+    if (scroll && first) first.scrollIntoView({ block: 'nearest' });
+  }
+
+  function buildFindRow(o) {
+    const f = s.find;
+    const doc = o.kind === 'doc' ? s.docs[o.doc_id] : null;
+    const row = el('button', 'board-find-row');
+    row.type = 'button';
+    row.dataset.id = o.id;
+    const t = timeOf(o);
+    const meta = [doc ? firstOf(doc.type) : KINDS[o.kind], t !== null ? fmtDay(toDay(t)) : 'Undated', groupById(o.group)?.title].filter(Boolean).join(' · ');
+    const title = doc ? docTitle(doc) : o.kind === 'doc' ? 'A document you can no longer see' : o.title || (o.text || '').split('\n')[0] || KINDS[o.kind];
+    row.append(el('div', 'board-tray-meta', meta), el('div', 'board-tray-title', title));
+    const passages = doc && f.highlighting[o.doc_id];
+    if (passages) {
+      const snippet = el('div', 'board-find-snippet');
+      // Escaped by the server, with <mark> around what matched, as in search results.
+      snippet.innerHTML = passages.content.join(' … ');
+      row.append(snippet);
+    } else if (f.q && (doc || o.title) && (o.text || '').toLowerCase().includes(f.q.toLowerCase())) {
+      row.append(el('div', 'board-find-snippet', `Your note: ${excerpt(o.text, f.q)}`));
+    }
+    row.addEventListener('click', () => goToFound(o));
+    row.addEventListener('pointerenter', () => s.nodes.get(drawnId(o.id))?.classList.add('find-hover'));
+    row.addEventListener('pointerleave', () => s.nodes.get(drawnId(o.id))?.classList.remove('find-hover'));
+    return row;
+  }
+
+  // A few words either side of the first match.
+  function excerpt(text, q) {
+    const at = text.toLowerCase().indexOf(q.toLowerCase());
+    const start = Math.max(0, at - 40);
+    return `${start ? '…' : ''}${text.slice(start, at + q.length + 60).replace(/\s+/g, ' ').trim()}${at + q.length + 60 < text.length ? '…' : ''}`;
+  }
+
+  // Selects it and brings it to the middle, zooming in only if it's too small to read.
+  function goToFound(o) {
+    s.find.current = o.id;
+    const id = drawnId(o.id);
+    const r = rectOf(id);
+    if (!r) return;
+    const box = s.els.canvas.getBoundingClientRect();
+    const k = Math.max(s.view.k, 0.6);
+    s.view = { k, x: box.width / 2 - (r.x + r.w / 2) * k, y: box.height / 2 - (r.y + r.h / 2) * k };
+    applyView();
+    select([id]);
+    renderInspector();
+    const node = s.nodes.get(id);
+    if (node) {
+      node.classList.remove('find-pulse');
+      void node.offsetWidth;  // to start it again if it's already been pulsed
+      node.classList.add('find-pulse');
+      node.addEventListener('animationend', () => node.classList.remove('find-pulse'), { once: true });
+    }
   }
 
   // ----- Tray -----
@@ -1703,6 +2105,7 @@
 
   // ----- Versions and starting again -----
   function openPanel(panel) {
+    showInspector(true);
     previewLink(null);
     s.suggest = null;
     s.panel = panel;
@@ -1865,6 +2268,7 @@
   async function openSuggestions(option) {
     const similar = option === true;
     const board = s;
+    showInspector(true);
     s.panel = null;
     s.suggest = { loading: true, similar };
     renderInspector();
@@ -2402,6 +2806,10 @@
       e.preventDefault();
       if (typing) e.target.blur();
       return saveByHand();
+    }
+    if (mod && e.key.toLowerCase() === 'f') {
+      e.preventDefault();
+      return showSide('find', true);
     }
     if (typing) return;
     if (mod && e.key.toLowerCase() === 'z') {

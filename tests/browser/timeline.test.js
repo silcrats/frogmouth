@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { startApp } = require('../support/harness');
-const { launch, signedInPage, makeCollection, openCollection, openTimeline } = require('../support/browser');
+const { launch, signedInPage, api, makeCollection, openCollection, openTimeline } = require('../support/browser');
 
 // Whether the diamond sits on the chart period holding the focused card's date.
 const diamondIsRight = page => page.evaluate(() => {
@@ -307,6 +307,114 @@ test('the timeline', async t => {
     await page.setViewportSize({ width: 390, height: 800 });
     await page.waitForTimeout(150);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'fits a phone');
+  });
+
+  await t.test('no errors in the page', () => assert.deepEqual(page.errors, []));
+});
+
+test('the timeline shows the board\'s groups and notes', async t => {
+  const app = await startApp();
+  const browser = await launch();
+  t.after(async () => { await browser.close(); await app.stop(); });
+  const page = await signedInPage(browser, app, 'alice');
+  const c = await makeCollection(page, 'Grouped', 8);
+  const [a, b] = c.ids;
+  const box = (id, title, color) => ({ id, title, color, x: 0, y: 0, w: 400, h: 300 });
+  const note = 'First line of the note.\nSecond line.\nThird line.\nFourth line, hidden until opened.';
+  assert.equal((await api(page, 'PUT', `/api/collections/${c.id}/board`, { revision: 0, board: {
+    groups: [box('g1', 'Payments', 'amber'), box('g2', 'Travel', 'blue')],
+    objects: [{ id: 'c1', kind: 'doc', doc_id: a, x: 0, y: 0, group: 'g1', text: note }, { id: 'c2', kind: 'doc', doc_id: b, x: 0, y: 0, group: 'g2' }],
+  } })).status, 200);
+  await openTimeline(page, 'Grouped');
+  const cards = () => page.locator('.result').count();
+  const choose = async value => { await page.locator('.timeline-group-select').selectOption(value); await page.waitForTimeout(350); };
+
+  await t.test('the picker lists every group with its count', async () => {
+    assert.deepEqual(await page.locator('.timeline-group-select option').allTextContents(),
+      ['All documents (8)', 'Not in a group (6)', 'Payments (1)', 'Travel (1)']);
+    assert.equal(await cards(), 8);
+  });
+
+  await t.test('cards carry their group\'s tag, in its colour, and your note', async () => {
+    const tag = page.locator('.timeline-group-tag', { hasText: 'Payments' });
+    assert.equal(await tag.count(), 1);
+    assert.equal(await tag.evaluate(e => getComputedStyle(e).borderLeftColor), 'rgb(217, 164, 65)');
+    const shown = page.locator('.result-note');
+    assert.equal(await shown.count(), 1);
+    const clipped = () => shown.locator('.result-note-text').evaluate(e => e.scrollHeight > e.clientHeight + 1);
+    assert.ok(await clipped(), 'a long note is cut short');
+    await shown.locator('xpath=ancestor::div[contains(@class,"result")][1]').locator('.expand-btn').click();
+    assert.ok(!(await clipped()), 'and shown in full once the card is open');
+  });
+
+  await t.test('choosing a group narrows the chart and the cards', async () => {
+    await choose('g2');
+    assert.equal(await cards(), 1);
+    assert.equal(await page.locator('.timeline-group-tag').textContent(), 'Travel');
+    assert.match(await page.locator('.timeline-head').textContent(), /\b1 dated document\b/);
+    await choose('none');
+    assert.equal(await cards(), 6);
+    assert.equal(await page.locator('.timeline-group-tag').count(), 0);
+    await choose('');
+    assert.equal(await cards(), 8);
+  });
+
+  await t.test('ticked cards move into a new group, which the board then lays out', async () => {
+    await choose('');
+    const checks = page.locator('.result-check');
+    await checks.nth(0).check();
+    await checks.nth(2).check();
+    await checks.nth(3).check();
+    await page.click('#selectGroup');
+    await page.fill('.collect-menu input', 'Look again');
+    await page.click('.collect-menu button[type=submit]');
+    await page.waitForTimeout(400);
+    assert.equal(await page.locator('#selectMessage').isVisible(), false, 'the tags say it, so no message');
+    assert.equal(await page.locator('.timeline-group-tag', { hasText: 'Look again' }).count(), 3);
+    assert.ok((await page.locator('.timeline-group-select option').allTextContents()).includes('Look again (3)'));
+    assert.equal(await page.locator('#selectGroup').isVisible(), false, 'nothing ticked now');
+
+    await page.click('.banner-board');
+    await page.waitForSelector('.board-group-title');
+    const frame = page.locator('.board-group', { has: page.locator('.board-group-title', { hasText: 'Look again' }) });
+    assert.equal(await frame.locator('.board-group-count').textContent(), '3');
+    const box = await page.evaluate(() => {
+      const frames = [...document.querySelectorAll('.board-group')].map(g => ({ title: g.querySelector('.board-group-title').textContent, r: g.getBoundingClientRect() }));
+      const cards = [...document.querySelectorAll('.board-card')].map(c => c.getBoundingClientRect());
+      return { frames, cards };
+    });
+    const mine = box.frames.find(f => f.title === 'Look again').r;
+    const inside = r => r.left >= mine.left - 1 && r.right <= mine.right + 1 && r.top >= mine.top - 1 && r.bottom <= mine.bottom + 1;
+    assert.equal(box.cards.filter(inside).length, 3, 'its three cards sit inside it');
+    const overlap = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    for (const other of box.frames.filter(f => f.title !== 'Look again')) assert.ok(!overlap(mine, other.r), `clear of ${other.title}`);
+    await page.waitForFunction(() => document.querySelector('.board-status span').textContent === 'Saved', null, { timeout: 8000 });
+    const saved = (await api(page, 'GET', `/api/collections/${c.id}/board`)).body.board;
+    assert.ok(!saved.groups.some(g => g.pending), 'laid out for good');
+    await page.locator('.board-bar').getByRole('button', { name: 'Close' }).click();
+    await page.waitForSelector('.board', { state: 'detached' });
+  });
+
+  await t.test('only documents left out get a message', async () => {
+    // Ticked here, then taken out of the collection elsewhere before grouping.
+    await page.locator('.result-check').nth(1).check();
+    await page.locator('.result-check').nth(4).check();
+    const gone = await page.locator('.result-check').nth(4).evaluate(e => e.dataset.id);
+    await api(page, 'POST', `/api/collections/${c.id}/items/bulk-remove`, { ids: [gone] });
+    await page.click('#selectGroup');
+    await page.fill('.collect-menu input', 'Second');
+    await page.click('.collect-menu button[type=submit]');
+    await page.waitForTimeout(400);
+    assert.equal(await page.locator('#selectMessage').textContent(), 'Left out 1 ticked document not in this collection.');
+    assert.equal(await page.locator('#selectMessage button').count(), 0);
+  });
+
+  await t.test('another collection starts with all documents', async () => {
+    await choose('g1');
+    await makeCollection(page, 'Other', 3);
+    await openTimeline(page, 'Other');
+    assert.equal(await page.locator('.timeline-group-select').count(), 0, 'no groups, no picker');
+    assert.equal(await cards(), 3);
   });
 
   await t.test('no errors in the page', () => assert.deepEqual(page.errors, []));

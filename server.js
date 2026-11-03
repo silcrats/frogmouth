@@ -59,7 +59,13 @@ app.use(session({
 }));
 // A long selection of results can far exceed the default limit below (5,000
 // ids of up to 2,048 characters), but only from someone signed in.
-app.post(['/api/collections/:id/items/bulk', '/api/collections/:id/items/bulk-remove'], requireAuth, express.json({ limit: '12mb' }));
+app.post(['/api/collections/:id/items/bulk', '/api/collections/:id/items/bulk-remove', '/api/collections/:id/board/groups'], requireAuth, express.json({ limit: '12mb' }));
+// With the board turned off (BOARD_ENABLED=false), none of its API answers.
+// Saved boards stay in the database for when it's turned back on.
+app.use('/api/collections/:id/board', (req, res, next) => {
+  if (config.collections.board) return next();
+  res.status(404).json({ error: 'The board is turned off' });
+});
 // A full board is a large single save: every document's id, and every note.
 app.put('/api/collections/:id/board', requireAuth, express.json({ limit: '20mb' }));
 app.use(express.json());
@@ -418,7 +424,7 @@ function collectionFilter(req, id = queryParam(req, 'collection')) {
 // /api/search and "add all results to a collection" so that they always
 // match the same documents. depth: how far down the results it'll be read,
 // which hybrid search has to be told.
-function buildSearchQuery(req, depth = config.vector.k, collectionId) {
+function buildSearchQuery(req, depth = config.vector.k, collectionId, docIds) {
   const qRaw = queryParam(req, 'q').trim();
   // "quoted" search: require the exact phrase, not just all/any of its
   // words anywhere in the field.
@@ -430,7 +436,8 @@ function buildSearchQuery(req, depth = config.vector.k, collectionId) {
   // with none set it lists everything the signed-in user can see (still capped
   // by role + pagination) -- match_all in place of the text search below.
   const filterBool = buildFilterBool(filters, logic, dateFrom, dateTo, queryParam(req, 'scope'), req.session.user.roles);
-  filterBool.push(...collectionFilter(req, collectionId));
+  // docIds: a given set of documents, such as a board's, in place of a collection.
+  filterBool.push(...(docIds ? [{ terms: { [F.id]: docIds } }] : collectionFilter(req, collectionId)));
   const mode = searchMode(req, q);
 
   const textMatch = mode === 'advanced' ? advancedQuery(qRaw) : q ? {
@@ -645,6 +652,27 @@ function dayParam(req, name) {
 // with counts per period and per day for the charts. from (inclusive) and to (exclusive)
 // zoom in: both the chart and the list cover just that range. Undated
 // documents are listed last, and only when not zoomed in.
+// The timeline's view of a board: each group with how many of these documents
+// it holds, and each document card's group and note. "Not in a group" covers
+// documents that aren't on the board at all, too.
+const UNGROUPED = 'none';
+function timelineBoard(board, docIds) {
+  const groups = new Map(board.groups.map(g => [g.id, { id: g.id, title: g.title || 'Untitled group', color: g.color, count: 0 }]));
+  const cards = new Map();
+  for (const o of board.objects) {
+    if (o.kind !== 'doc') continue;
+    const group = groups.get(o.group);
+    cards.set(o.doc_id, { group: group ? { id: group.id, title: group.title, color: group.color } : null, note: o.text || '' });
+  }
+  let ungrouped = 0;
+  for (const docId of docIds) {
+    const group = groups.get(cards.get(docId)?.group?.id);
+    if (group) group.count++;
+    else ungrouped++;
+  }
+  return { groups: [...groups.values()], ungrouped, cards };
+}
+
 app.get('/api/collections/:id/timeline', requireAuth, async (req, res) => {
   const owner = collectionOwner(req);
   const { id, name, description } = collections.get(owner, req.params.id);
@@ -658,13 +686,23 @@ app.get('/api/collections/:id/timeline', requireAuth, async (req, res) => {
   const from = dayParam(req, 'from');
   const to = dayParam(req, 'to');
   const zoomed = from !== null || to !== null;
+  const stored = config.collections.board ? collections.board(owner, id) : null;
+  // A group deleted from the board since (in another window, say) means all of them;
+  // the answer says which was used.
+  const asked = stored ? queryParam(req, 'group') : '';
+  const group = asked === UNGROUPED || stored?.groups.some(g => g.id === asked) ? asked : '';
   try {
     const matched = searching
       ? new Set((await osSearch({ size: MAX_ITEMS, _source: [F.id], query })).hits.hits.map(h => h._source[F.id]))
       : null;
     const ids = matched ? allIds.filter(docId => matched.has(docId)) : allIds;
     const hits = await visibleHits(req, ids, { source: [F.id, F.created] });
-    const entries = hits.map(h => ({ id: h._source[F.id], time: parseDocDate(h._source[F.created]) }));
+    // The board's groups, counted over what the chart would show for each, and a
+    // chosen group narrowing everything to its cards.
+    const board = stored && timelineBoard(stored, hits.map(h => h._source[F.id]));
+    const inGroup = docId => (board.cards.get(docId)?.group?.id || UNGROUPED) === group;
+    const entries = hits.filter(h => !group || inGroup(h._source[F.id]))
+      .map(h => ({ id: h._source[F.id], time: parseDocDate(h._source[F.created]) }));
     const undated = entries.filter(e => e.time === null).map(e => e.id);
     const allDated = entries.filter(e => e.time !== null);
     const dated = allDated
@@ -674,6 +712,11 @@ app.get('/api/collections/:id/timeline', requireAuth, async (req, res) => {
     const page = await pageOfIds(req, ordered, start, rows, ordered.length, textMatch);
     res.json({
       ...page,
+      ...(board && {
+        board: { groups: board.groups, ungrouped: board.ungrouped, group },
+        // What the board says about each card on this page: its group and your note.
+        cards: Object.fromEntries(page.docs.filter(d => board.cards.has(d.id)).map(d => [d.id, board.cards.get(d.id)])),
+      }),
       ...timelineBuckets(dated.map(e => e.time)),
       days: timelineDays(dated.map(e => e.time)),
       // Every day with a document, zoomed in or not, for moving between periods.
@@ -714,10 +757,38 @@ app.get('/api/collections/:id/board', requireAuth, async (req, res) => {
   }
 });
 
+// Searching a board's documents: the collection's and any still on the board,
+// best first, with highlighted passages for the first few for its Find list.
+const BOARD_FIND_PREVIEWS = 100;
+app.get('/api/collections/:id/board/search', requireAuth, async (req, res) => {
+  const owner = collectionOwner(req);
+  const { id } = collections.get(owner, req.params.id);
+  const board = collections.board(owner, id);
+  const docIds = [...new Set([...collections.items(owner, id), ...board.objects.filter(o => o.kind === 'doc').map(o => o.doc_id)])];
+  if (!queryParam(req, 'q').trim()) throw new BadRequest('Type something to search for');
+  const { query, textMatch } = buildSearchQuery(req, docIds.length, null, docIds);
+  try {
+    const ids = docIds.length
+      ? (await osSearch({ size: docIds.length, _source: [F.id], query })).hits.hits.map(h => h._source[F.id])
+      : [];
+    const { highlighting } = await pageOfIds(req, ids, 0, BOARD_FIND_PREVIEWS, ids.length, textMatch);
+    res.json({ ids, highlighting });
+  } catch (err) {
+    console.error('Board search error:', err.message);
+    sendSearchError(req, res, err, 'Could not search the board');
+  }
+});
+
 app.put('/api/collections/:id/board', requireAuth, (req, res) => {
   const { revision, board } = req.body || {};
   if (!Number.isInteger(revision)) throw new BadRequest('Invalid revision');
   res.json(collections.saveBoard(collectionOwner(req), req.params.id, revision, board));
+});
+
+// Ticked documents from the timeline, into a new group on the board.
+app.post('/api/collections/:id/board/groups', requireAuth, (req, res) => {
+  const { ids, title } = req.body || {};
+  res.status(201).json(collections.addBoardGroup(collectionOwner(req), req.params.id, ids, title));
 });
 
 // Named versions of a board, to go back to. They hold what the board does: ids,
