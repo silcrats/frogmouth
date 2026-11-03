@@ -58,6 +58,12 @@ app.use(session({
 // A long selection of results can far exceed the default limit below (1,000
 // ids of up to 2,048 characters), but only from someone signed in.
 app.post(['/api/collections/:id/items/bulk', '/api/collections/:id/items/bulk-remove'], requireAuth, express.json({ limit: '3mb' }));
+// With the board turned off (BOARD_ENABLED=false), none of its API answers.
+// Saved boards stay in the database for when it's turned back on.
+app.use('/api/collections/:id/board', (req, res, next) => {
+  if (config.collections.board) return next();
+  res.status(404).json({ error: 'The board is turned off' });
+});
 // A full board is a large single save: every document's id, and every note.
 app.put('/api/collections/:id/board', requireAuth, express.json({ limit: '12mb' }));
 app.use(express.json());

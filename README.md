@@ -93,7 +93,7 @@ come from the environment.
 | `filters`, `types` | Filter list; file-type aliases and groups |
 | `downloads` | Downloaders by URL scheme (`smb`, using a `shares.yaml`) |
 | `vector` | Semantic and hybrid search (`VECTOR_ENABLED`), off by default. Needs Pelican's vector search; adds a Keyword / Semantic / Hybrid switch, and improves board suggestions |
-| `collections` | Where users' collections are stored: an SQLite file, `data/collections.db` by default (`/app/data` in the image; `COLLECTIONS_DB` to move it) |
+| `collections` | Where users' collections are stored: an SQLite file, `data/collections.db` by default (`/app/data` in the image; `COLLECTIONS_DB` to move it), and whether to offer the evidence board (`BOARD_ENABLED`, on by default) |
 
 Collections live in that file, so keep it on a volume and back it up: the
 compose example mounts the `frogmouth-data` volume at `/app/data`. Without

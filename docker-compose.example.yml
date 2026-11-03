@@ -19,6 +19,9 @@ services:
     environment:
       SHARES_CONFIG: /app/shares.yaml
       OS_CA_CERTS: /certs/ca.pem
+      # The evidence board (Board button on a collection). Set to "false" to
+      # turn it off; saved boards are kept for when it's turned back on.
+      BOARD_ENABLED: "true"
     volumes:
       # Pelican's CA, to verify OpenSearch's certificate.
       - certs:/certs:ro
