@@ -331,3 +331,27 @@ test('the default search mode', async t => {
 
   await t.test('no errors in the page', () => assert.deepEqual(page.errors, []));
 });
+
+test('with the board turned off', async t => {
+  const app = await startApp({ board: false });
+  const browser = await launch();
+  t.after(async () => { await browser.close(); await app.stop(); });
+  const page = await signedInPage(browser, app, 'alice');
+
+  await t.test('a collection has no Board button, and its other views work', async () => {
+    await makeCollection(page, 'no board', 5);
+    await openCollection(page, 'no board');
+    assert.equal(await page.locator('.banner-board').count(), 0);
+    assert.equal(await page.locator('[data-view=timeline]').count(), 1);
+    await page.click('[data-view=timeline]');
+    await page.waitForSelector('.timeline-squares');
+    assert.deepEqual(page.errors, []);
+  });
+
+  await t.test('the user guide leaves the board out', async () => {
+    await page.goto(`${app.url}/help`);
+    await page.waitForTimeout(300);
+    assert.equal(await page.getByRole('heading', { name: 'Working on a board' }).isVisible(), false);
+    assert.equal(await page.getByRole('heading', { name: 'Downloading a whole collection' }).isVisible(), true);
+  });
+});

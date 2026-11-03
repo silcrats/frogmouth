@@ -59,7 +59,7 @@
   th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
   th { color: var(--text-dim); font-weight: 600; font-size: 12.5px; }
   .back { display: inline-block; margin-bottom: 20px; font-family: var(--mono); font-size: 12px; }
-  [data-needs="vector"][hidden], [data-needs="mail"][hidden] { display: none; }
+  [data-needs][hidden] { display: none; }
   @media (max-width: 600px) { h1 { font-size: 23px; } .shell { padding-top: 28px; } }
 </style>
 </head>
@@ -217,7 +217,7 @@
   </ul>
   <p>On a wide screen you can keep the panel at the <span class="ui">Left</span> or <span class="ui">Right</span> of the window while you search, or at the <span class="ui">Top</span>. Your choice is remembered in this browser.</p>
   <h3>Searching inside a collection</h3>
-  <p>While a collection is open, the search box and filters look only inside it, with the box showing which one. Searches there start as <span class="ui">Keyword</span>, because semantic and hybrid searches find the closest documents rather than exact matches, so they include nearly everything and mostly change the order. <span class="ui">Items</span> lists the matches, best first, and <span class="ui">Timeline</span> narrows the chart and cards to them, oldest first. <span class="ui">Add all results</span> in <span class="ui">Items</span> adds the matches to another collection. <span class="ui">Board</span> always shows the whole board, and <span class="ui">Download all</span> the whole collection.</p>
+  <p>While a collection is open, the search box and filters look only inside it, with the box showing which one. Searches there start as <span class="ui">Keyword</span>, because semantic and hybrid searches find the closest documents rather than exact matches, so they include nearly everything and mostly change the order. <span class="ui">Items</span> lists the matches, best first, and <span class="ui">Timeline</span> narrows the chart and cards to them, oldest first. <span class="ui">Add all results</span> in <span class="ui">Items</span> adds the matches to another collection. <span class="ui">Download all</span> always downloads the whole collection<span data-needs="board">, and <span class="ui">Board</span> always shows the whole board</span>.</p>
   <p><span class="ui">Search everything</span> runs what you've typed across all documents instead. <span class="ui">Back to search</span> returns to your main search and filters, just as you left them.</p>
   <h3>Seeing a collection on a timeline</h3>
   <p>Open a collection and choose <span class="ui">Timeline</span> in the bar above its documents. A chart shows when its documents are dated, and the list below runs oldest first. Choose how the chart looks; your choice is remembered in this browser:</p>
@@ -231,6 +231,7 @@
   <p>A yellow diamond marks the date of the card in focus on the chart, and the card has a yellow outline. In focus means nearest the middle of the row or of the window, or the card you've tabbed to. In the vertical layout, the chart stays at the top of the window as you scroll, if there's room. A document with no date has no place on the chart, so the line under it says so. To jump through time, hold the middle mouse button on the diamond and drag it along the chart. The cards follow as you go, and if a date is on another page, that page opens when you let go. The chart's dates are in UTC, while cards show your local time, so the two can differ by a day.</p>
   <p><span class="ui">Hints</span> shows short reminders of how to use the chart, including that its dates are in UTC.</p>
   <p>Each document's date is labelled <em>Sent</em>, <em>Taken</em> or <em>Modified</em> to show what it means. A modified date can be later than when a document was really written, and documents with no usable date are listed last.</p>
+  <section data-needs="board">
   <h3>Working on a board</h3>
   <p>Open a collection and choose <span class="ui">Board</span> in the bar above its documents. A board is a large canvas for laying out a collection's documents and how they relate, like an evidence board. Each collection has one, and it saves itself as you work.</p>
   <ul>
@@ -253,6 +254,7 @@
   <p><span class="ui">Versions</span> keeps named copies of the board, up to 30, to go back to. Save one before trying something out, such as a different grouping. <span class="ui">Restore</span> puts a version back, and keeps what it replaced as an automatic version. Automatic versions make way for new ones when the limit is reached; ones you named are never removed unless you delete them.</p>
   <p><span class="ui">Reset board</span> clears everything and starts again, after asking first. The documents stay in the collection and go back to the tray, and the old board is saved as a version called "Before reset".</p>
   <p>If you lose access to a document, its card stays with your notes and connections but no longer shows anything about the document. If a document is removed from the collection, its card says so and offers to add it back.</p>
+  </section>
   <h3>Downloading a whole collection</h3>
   <p>Open a collection and choose <span class="ui">Download all</span> in the bar above its documents. You get one zip file, with the documents you can open now under their own file names; files with the same name are numbered. Where a file can't be included, because it couldn't be read or the download reached its size limit, a file called <code>_not-included.txt</code> in the zip lists it. <span data-needs="sharepoint">Email and SharePoint items aren't files, so that list gives links to them instead.</span></p>
   <p>Large collections take a while, and your browser can't show how far along the download is. You can run one at a time.</p>
@@ -278,8 +280,8 @@
     <tr><td>Download fails</td><td>The file may have been moved, deleted or had its permissions changed since it was indexed.</td></tr>
     <tr><td><span class="ui">Download all</span> says the collection is over the limit</td><td>One download has a size limit, and the message gives it. Split the documents into smaller collections, or download the largest ones on their own.</td></tr>
     <tr><td><span class="ui">Download all</span> says a download is already running</td><td>Wait for your other download to finish, or cancel it in your browser, then try again. If the message says too many are running, try again shortly.</td></tr>
-    <tr><td>A board says it was changed in another window</td><td>The same board is open somewhere else. Choose <span class="ui">Reload</span> to pick up the latest version. Changes made here since the last save are lost.</td></tr>
-    <tr><td>A board says it couldn't save</td><td>It keeps trying while it's open, and <span class="ui">Close</span> warns you first if changes still aren't saved.</td></tr>
+    <tr data-needs="board"><td>A board says it was changed in another window</td><td>The same board is open somewhere else. Choose <span class="ui">Reload</span> to pick up the latest version. Changes made here since the last save are lost.</td></tr>
+    <tr data-needs="board"><td>A board says it couldn't save</td><td>It keeps trying while it's open, and <span class="ui">Close</span> warns you first if changes still aren't saved.</td></tr>
     <tr><td>Files are missing from a zip</td><td>Open <code>_not-included.txt</code> in the zip to see which ones and why. Documents you can no longer open are left out without being listed.</td></tr>
     <tr><td>A zip download stops partway, or the zip won't open</td><td>The connection probably dropped. Download it again.</td></tr>
   </table>
@@ -307,6 +309,7 @@
 
     const has = {
       vector: (cfg.search_modes || []).includes('semantic'),
+      board: cfg.board !== false,
       mail: (cfg.filters || []).some(f => ['from', 'to', 'cc', 'attachments'].includes(f.key)),
       sharepoint: sources.some(s => s.folder_link),
     };

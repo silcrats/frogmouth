@@ -1114,6 +1114,7 @@
   // size): the search, or a collection (set by the collections code below).
   let loadPage = start => runSearch(currentQuery, start);
   let semanticAvailable = false;
+  let boardAvailable = true;
   let currentQuery = '';
   let currentStart = 0;
   let currentTotal = 0;
@@ -1508,6 +1509,7 @@
     modeToggle.style.display = modes.length > 1 ? '' : 'none';
     setSearchMode(cfg.default_mode || 'keyword');
     semanticAvailable = modes.includes('semantic');
+    boardAvailable = cfg.board !== false;
 
     FIELD_LABELS = {};
     FILTER_PLACEHOLDERS = {};
@@ -2424,7 +2426,7 @@
     collectionBanner.innerHTML = `<span class="banner-title">Collection: <strong>${escapeHtml(openCollection.name)}</strong></span>
       <div class="banner-views">${views.map(([v, label]) =>
         `<button type="button" data-view="${v}" class="${v === collectionView ? 'active' : ''}">${label}</button>`
-        + (v === 'timeline' ? `<button type="button" class="banner-board" title="Arrange this collection's documents on a board, with notes, groups, connections and a timeline">Board</button>` : '')).join('')}</div>
+        + (v === 'timeline' && boardAvailable ? `<button type="button" class="banner-board" title="Arrange this collection's documents on a board, with notes, groups, connections and a timeline">Board</button>` : '')).join('')}</div>
       <button type="button" class="banner-download" title="Download this collection's files as one zip">&#8595; Download all</button>
       <button type="button" class="banner-back">Back to search</button>
       ${openCollection.description ? `<div class="banner-desc">${escapeHtml(openCollection.description)}</div>` : ''}`;
@@ -2433,7 +2435,7 @@
       else if (b.dataset.view === 'timeline') { resetTimelineZoom(); showTimeline(0); }
       else showSimilar(b.dataset.view, 0);
     }));
-    collectionBanner.querySelector('.banner-board').addEventListener('click', () => {
+    collectionBanner.querySelector('.banner-board')?.addEventListener('click', () => {
       openBoard(openCollection, () => collectionChanged(openCollection.id));
     });
     collectionBanner.querySelector('.banner-download').addEventListener('click', e => downloadCollection(e.currentTarget));
